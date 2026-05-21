@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   detectEntryTex,
@@ -8,6 +10,13 @@ import {
   stripTexComment,
   type FileNode,
 } from './tex-detect.js';
+
+// Operator-local fixtures under `test submissions/` are gitignored so they
+// are not present in CI or for public contributors. Tests that depend on
+// them skip when the directory is absent and run only on the operator
+// workstation where the real preprint sources live.
+const TEST_SUBMISSIONS_ROOT = new URL('../../../../test submissions/', import.meta.url);
+const HAS_TEST_SUBMISSIONS = existsSync(fileURLToPath(TEST_SUBMISSIONS_ROOT));
 
 const DOCCLASS = '\\documentclass{article}\n';
 
@@ -243,7 +252,7 @@ and $\kapm \to \mtwo$ for $M\Lambda \gg 1$.
     expect(meta.abstract).toContain('\\(\\kappa_{-} \\to m_{2,\\,{\\rm pole}}\\)');
   });
 
-  it('parses the three checked-in source submission fixtures', async () => {
+  it.skipIf(!HAS_TEST_SUBMISSIONS)('parses the three checked-in source submission fixtures', async () => {
     const fs = await import('node:fs/promises');
     const fixtures = [
       {
@@ -271,7 +280,7 @@ and $\kapm \to \mtwo$ for $M\Lambda \gg 1$.
     }
   });
 
-  it('keeps de Sitter core fixture abstract math renderable', async () => {
+  it.skipIf(!HAS_TEST_SUBMISSIONS)('keeps de Sitter core fixture abstract math renderable', async () => {
     const fs = await import('node:fs/promises');
     const source = await fs.readFile(
       new URL('../../../../test submissions/04_de_sitter_core/main.tex', import.meta.url),

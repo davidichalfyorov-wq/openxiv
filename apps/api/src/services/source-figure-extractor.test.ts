@@ -1,9 +1,18 @@
+import { existsSync } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { sourceFigureUploadKey, __testing, type SourceFigureAsset } from './source-figure-extractor.js';
 import type { FileNode } from './tex-detect.js';
 
 const { collectSourceFigureCandidates, captionFromPath, shouldIgnoreArchivePath } = __testing;
+
+// Operator-local fixtures under `test submissions/` are gitignored so they
+// are not present in CI or for public contributors. Tests that depend on
+// them skip when the directory is absent and run only on the operator
+// workstation where the real preprint sources live.
+const TEST_SUBMISSIONS_ROOT = new URL('../../../../test submissions/', import.meta.url);
+const HAS_TEST_SUBMISSIONS = existsSync(fileURLToPath(TEST_SUBMISSIONS_ROOT));
 
 function file(path: string, marker = path): FileNode {
   return { path, content: /\.tex$/i.test(path) ? marker : '', bytes: Buffer.from(marker) };
@@ -103,7 +112,7 @@ describe('source figure extraction candidates', () => {
     expect(candidates).toEqual([]);
   });
 
-  it('finds every submitted figure in the de Sitter source tree', async () => {
+  it.skipIf(!HAS_TEST_SUBMISSIONS)('finds every submitted figure in the de Sitter source tree', async () => {
     const root = new URL('../../../../test submissions/04_de_sitter_core/', import.meta.url);
     const names = await readdir(root);
     const files = await Promise.all(
