@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/web/public/brand/logo-mark.svg" alt="OpenXiv" width="220" />
+  <img src="apps/api/src/services/brand/logo-full.png" alt="OpenXiv" width="260" />
 </p>
 
 <h1 align="center">OpenXiv</h1>
