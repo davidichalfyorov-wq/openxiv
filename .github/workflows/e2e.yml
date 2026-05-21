@@ -1,0 +1,62 @@
+name: E2E
+
+# Manual-only trigger. The docker-compose stack needs hardening to come
+# up cleanly on hosted runners without operator-provided env. Until
+# that is done, this job is run by the operator from the Actions tab
+# (Run workflow button) before tagged releases. Unit tests in ci.yml
+# remain the blocking signal on every push.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: End-to-end (docker-compose)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Build & start stack
+        run: |
+          docker compose up -d --build postgres redis minio minio-init grobid api worker web
+          # Wait for both web and api to respond. The for-loop on web alone
+          # exits as soon as web SSR returns 200, which can happen before
+          # the api has finished migrations and started listening on 4000.
+          for i in $(seq 1 90); do
+            web_ok=$(curl -fsS http://localhost:4321 >/dev/null 2>&1 && echo 1 || echo 0)
+            api_ok=$(curl -fsS http://localhost:4000/health >/dev/null 2>&1 && echo 1 || echo 0)
+            if [ "$web_ok" = "1" ] && [ "$api_ok" = "1" ]; then echo ready; break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:4000/health
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @openxiv/e2e install:browsers
+
+      - name: Run E2E
+        run: pnpm test:e2e
+        env:
+          E2E_BASE_URL: http://localhost:4321
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose logs --tail=400
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
