@@ -1,0 +1,146 @@
+---
+import Base from '../../layouts/Base.astro';
+import { serverClient } from '../../lib/api';
+
+const handle = Astro.params.handle;
+if (!handle) return new Response('Missing handle', { status: 400 });
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+const me = await client.me().catch(() => null);
+if (!me?.authenticated) {
+  return Astro.redirect(`/auth/sign-in?return=${encodeURIComponent(Astro.url.pathname)}`, 302);
+}
+
+let profile: Awaited<ReturnType<typeof client.profile>> | null = null;
+let insights: Awaited<ReturnType<typeof client.profileInsights>> | null = null;
+let error: string | null = null;
+try {
+  profile = await client.profile(handle);
+  insights = await client.profileInsights(handle);
+} catch (err) {
+  error = (err as Error).message;
+}
+
+const totals = insights
+  ? insights.items.reduce(
+      (acc, item) => {
+        acc.views += item.analytics.viewsTotal;
+        acc.downloads += item.analytics.downloadsTotal;
+        acc.html += item.analytics.htmlOpensTotal;
+        acc.endorsements += item.analytics.endorsementsTotal;
+        return acc;
+      },
+      { views: 0, downloads: 0, html: 0, endorsements: 0 },
+    )
+  : null;
+---
+<Base title={`Insights — @${handle}`} description="Author-only OpenXiv paper analytics.">
+  <main class="container insights-page">
+    <p class="muted"><a href={`/@${handle}`}>← @{handle}</a></p>
+    <h1 class="title-serif">Author insights</h1>
+    {profile && <p class="muted">Private dashboard for {profile.displayName}'s OpenXiv papers.</p>}
+
+    {error && (
+      <div class="card" style="border-color: var(--tone-caution);">
+        <strong>Insights unavailable.</strong>
+        <p class="muted" style="margin: 6px 0 0;">{error}</p>
+      </div>
+    )}
+
+    {insights && totals && (
+      <>
+        <p class="muted">Generated at {insights.generatedAt}</p>
+        <section class="insights-grid">
+          {[
+            ['Views', totals.views],
+            ['PDF downloads', totals.downloads],
+            ['HTML opens', totals.html],
+            ['Endorsements', totals.endorsements],
+          ].map(([label, value]) => (
+            <div class="card insights-kpi">
+              <span class="muted">{label}</span>
+              <strong>{value}</strong>
+            </div>
+          ))}
+        </section>
+
+        <section class="stack">
+          {insights.items.map((item) => (
+            <article class="card insights-paper">
+              <header>
+                <a href={`/p/${item.openxivUrlId ?? item.id}`} class="insights-title">{item.title}</a>
+                <p class="muted">{item.openxivId ?? item.id}</p>
+              </header>
+              <div class="insights-paper-grid">
+                {[
+                  ['24h views', item.analytics.views24h],
+                  ['Total views', item.analytics.viewsTotal],
+                  ['PDF', item.analytics.downloadsTotal],
+                  ['HTML', item.analytics.htmlOpensTotal],
+                  ['Endorsements', item.analytics.endorsementsTotal],
+                ].map(([label, value]) => (
+                  <div class="insights-metric">
+                    <span class="muted">{label}</span>
+                    <strong>{value}</strong>
+                  </div>
+                ))}
+              </div>
+              <div class="insights-slices">
+                <div>
+                  <h2>Top referrers</h2>
+                  {item.analytics.topReferrers.length > 0 ? (
+                    <ul>
+                      {item.analytics.topReferrers.map((r) => <li><span>{r.host}</span><strong>{r.count}</strong></li>)}
+                    </ul>
+                  ) : <p class="muted">No referrers yet.</p>}
+                </div>
+                <div>
+                  <h2>Countries</h2>
+                  {item.analytics.countries.length > 0 ? (
+                    <ul>
+                      {item.analytics.countries.map((c) => <li><span>{c.country}</span><strong>{c.count}</strong></li>)}
+                    </ul>
+                  ) : <p class="muted">No country data yet.</p>}
+                </div>
+              </div>
+            </article>
+          ))}
+          {insights.items.length === 0 && <p class="muted">No published papers yet.</p>}
+        </section>
+      </>
+    )}
+  </main>
+</Base>
+
+<style>
+  .insights-page { max-width: 1080px; }
+  .insights-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .insights-kpi { padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+  .insights-kpi strong { font-family: var(--font-serif); font-size: 26px; }
+  .insights-title { font-family: var(--font-serif); font-size: 18px; color: inherit; text-decoration: none; }
+  .insights-paper { padding: 16px; }
+  .insights-paper-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+    margin: 12px 0;
+  }
+  .insights-metric { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+  .insights-metric span { display: block; font-size: 12px; }
+  .insights-metric strong { font-family: var(--font-serif); font-size: 20px; }
+  .insights-slices {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .insights-slices h2 { margin: 0 0 6px; font-family: var(--font-serif); font-size: 15px; }
+  .insights-slices ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+  .insights-slices li { display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: 13px; }
+</style>

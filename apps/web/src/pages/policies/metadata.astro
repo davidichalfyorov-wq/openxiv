@@ -1,0 +1,99 @@
+---
+import Base from '../../layouts/Base.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+---
+<Base
+  title="Metadata policy — OpenXiv"
+  description="OpenXiv metadata is CC0 — public domain, freely reusable. Standards: Dublin Core, Crossref, Google Scholar, JSON-LD."
+>
+  <main class="container-narrow">
+    <Breadcrumbs items={[{ name: 'Home', url: '/' }, { name: 'Policies', url: '/policies' }, { name: 'Metadata policy', url: '/policies/metadata' }]} />
+    <h1 class="title-serif">Metadata policy</h1>
+    <p class="muted">Last updated 2026-05-18. Plain English.</p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">License</h2>
+    <p class="body-serif">
+      Bibliographic metadata for every OpenXiv record is licensed
+      <strong>CC0 1.0 (public domain)</strong>. That means: copy it,
+      reuse it, index it, mirror it. Attribution is appreciated but
+      not required. The metadata covers title, authors, abstract,
+      keywords, categories, DOI, ORCID, publication date, version
+      number.
+    </p>
+    <p class="body-serif">
+      This is separate from the <em>content</em> license (the PDF /
+      HTML), which authors choose at submit — see the
+      <a href="/policies/items">content policy</a>.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Standards we emit</h2>
+    <ul class="body-serif">
+      <li><strong>OAI-PMH 2.0</strong> at <code>/oai-pmh</code> — harvesters
+        can pull `oai_dc` (Dublin Core) records by category or
+        modification window.</li>
+      <li><strong>Crossref deposit XML</strong> — when a paper's DOI
+        is deposited, the metadata follows Crossref schema 5.3.1.</li>
+      <li><strong>HighWire Press citation_* meta tags</strong> on each
+        abstract page (`citation_title`, `citation_author`,
+        `citation_publication_date`, `citation_doi`,
+        `citation_pdf_url`, `citation_arxiv_id`, `citation_journal_title`,
+        `citation_issn`). This is what Google Scholar parses.</li>
+      <li><strong>JSON-LD ScholarlyArticle</strong> in the page head
+        with author Person + affiliation Organization nodes and an
+        `isPartOf` link to the OpenXiv ISSN.</li>
+      <li><strong>Open Graph + Twitter cards</strong> for social
+        previews.</li>
+      <li><strong>Atom feed</strong> at <code>/feed.atom</code>.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Languages</h2>
+    <p class="body-serif">
+      OpenXiv currently emits metadata in English (<code>citation_language=en</code>,
+      <code>inLanguage: 'en'</code>). Multi-language metadata is on the
+      roadmap; submissions in other languages may declare their
+      language in the abstract, and the bibliographic surface will
+      pick that up when the schema lands.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Updates and corrections</h2>
+    <p class="body-serif">
+      Bibliographic data is <strong>immutable after publish</strong>:
+      title, author list, abstract, DOI — none of these change on the
+      original record. Corrections take one of two forms:
+    </p>
+    <ul class="body-serif">
+      <li><strong>Versioning</strong> — submit a new version (v2, v3,
+        …) with the corrected content. Each version has its own
+        record; the original stays accessible.</li>
+      <li><strong>Crossref correction</strong> — when the corrected
+        version is deposited, Crossref's update record links it back
+        to the original so downstream indexers can follow the chain.</li>
+    </ul>
+    <p class="body-serif">
+      The same correction also propagates to ORCID for every author
+      with an ORCID iD recorded — their work list at orcid.org
+      auto-updates from the deposit.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Identifiers</h2>
+    <p class="body-serif">
+      Every published paper carries:
+    </p>
+    <ul class="body-serif">
+      <li>An <strong>OpenXiv id</strong> like
+        <code>cs.AI.2026.00001</code> — short, sortable, year + subject
+        scoped.</li>
+      <li>A <strong>DOI</strong> when Crossref membership credentials are
+        provisioned. DOIs are opaque (<code>10.&#123;prefix&#125;/openxiv.&#123;id&#125;</code>)
+        and immutable.</li>
+      <li>An <strong>AT-proto URI</strong> on the author's Personal Data
+        Server, so the record federates with Bluesky.</li>
+    </ul>
+
+    <p class="muted" style="margin-top: 24px;">
+      Related: <a href="/policies/items">Content policy</a> ·
+      <a href="/policies/preservation">Preservation</a> ·
+      <a href="/policies">All policies</a>.
+    </p>
+  </main>
+</Base>

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="OpenXiv">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0e0e10"/>
+      <stop offset="100%" stop-color="#1a1a1f"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#7c8cff"/>
+      <stop offset="100%" stop-color="#b89cff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <g font-family="Fraunces, ui-serif, Georgia, serif">
+    <text x="80" y="180" font-size="120" font-weight="700" fill="#fbfbfa">Open<tspan fill="url(#accent)">Xiv</tspan></text>
+    <text x="80" y="280" font-size="44" font-weight="400" fill="#cfcfd6">A preprint server that lives</text>
+    <text x="80" y="340" font-size="44" font-weight="400" fill="#cfcfd6">in your social feed.</text>
+    <text x="80" y="450" font-size="26" font-weight="400" fill="#9d9da6">Built on AT Protocol  ·  Endorsements with verbs</text>
+    <text x="80" y="490" font-size="26" font-weight="400" fill="#9d9da6">Trust Passport across four dimensions</text>
+    <text x="80" y="560" font-size="22" font-weight="400" fill="#7e7e88">openxiv.net  ·  ISSN 3120-9556</text>
+  </g>
+</svg>

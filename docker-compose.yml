@@ -1,0 +1,168 @@
+name: openxiv
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openxiv
+      POSTGRES_PASSWORD: openxiv
+      POSTGRES_DB: openxiv
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openxiv -d openxiv"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "6380:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >-
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb -p local/openxiv-blobs || true &&
+      mc anonymous set download local/openxiv-blobs || true &&
+      echo 'bucket ready'"
+
+  grobid:
+    image: lfoppiano/grobid:0.8.1
+    restart: unless-stopped
+    ports:
+      - "8071:8070"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8070/api/isalive"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      # NOTE: this compose file runs as development so that the placeholder
+      # SESSION_SECRET / JWT_SECRET below are tolerated. Override BEFORE
+      # flipping NODE_ENV to production — parseEnv refuses to start with the
+      # well-known placeholder values in production.
+      NODE_ENV: development
+      LOG_LEVEL: info
+      API_PORT: 4000
+      PUBLIC_API_BASE: http://localhost:4000
+      PUBLIC_WEB_BASE: http://localhost:4321
+      DATABASE_URL: postgres://openxiv:openxiv@postgres:5432/openxiv
+      REDIS_URL: redis://redis:6379
+      PG_POOL_MAX: "20"
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
+      S3_REGION: auto
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadmin
+      S3_BUCKET: openxiv-blobs
+      S3_FORCE_PATH_STYLE: "true"
+      GROBID_URL: http://grobid:8070
+      SESSION_SECRET: dev-session-secret-please-replace-32-chars-min
+      JWT_SECRET: dev-jwt-secret-please-replace-32-chars-min
+      USE_MOCK_CLIENTS: "true"
+      CORS_ORIGINS: http://localhost:4321
+    ports:
+      - "4000:4000"
+    command: ["api"]
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: info
+      OPENXIV_RUN_MIGRATIONS: "false"
+      DATABASE_URL: postgres://openxiv:openxiv@postgres:5432/openxiv
+      REDIS_URL: redis://redis:6379
+      PG_POOL_MAX: "30"
+      WORKER_COMPILE_CONCURRENCY: "2"
+      WORKER_EMBED_CONCURRENCY: "4"
+      WORKER_EXPLAIN_CONCURRENCY: "2"
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
+      S3_REGION: auto
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadmin
+      S3_BUCKET: openxiv-blobs
+      S3_FORCE_PATH_STYLE: "true"
+      GROBID_URL: http://grobid:8070
+      SESSION_SECRET: dev-session-secret-please-replace-32-chars-min
+      JWT_SECRET: dev-jwt-secret-please-replace-32-chars-min
+      USE_MOCK_CLIENTS: "true"
+    command: ["worker"]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 4321
+      PUBLIC_API_BASE: http://localhost:4000
+      INTERNAL_API_BASE: http://api:4000
+    ports:
+      - "4321:4321"
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

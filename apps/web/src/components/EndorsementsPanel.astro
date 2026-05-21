@@ -1,0 +1,290 @@
+---
+import { serverClient, type UserMeResponse, type PaperDetail } from '../lib/api';
+
+interface Props {
+  paper: PaperDetail;
+  me: UserMeResponse | null;
+}
+const { paper, me } = Astro.props;
+
+const VERB_META: Record<string, { label: string; blurb: string }> = {
+  verified_derivation: {
+    label: 'Verified derivation',
+    blurb: 'Worked through the math or proofs and they hold.',
+  },
+  checked_references: {
+    label: 'Checked references',
+    blurb: 'Spot-checked the cited literature for accuracy.',
+  },
+  reproduced_result: {
+    label: 'Reproduced result',
+    blurb: 'Ran the experiment or computation and got matching numbers.',
+  },
+  useful_background: {
+    label: 'Useful background',
+    blurb: 'Read it; useful context for my own work.',
+  },
+  important_but_flawed: {
+    label: 'Important but flawed',
+    blurb: 'Worth reading despite known problems.',
+  },
+  needs_correction: {
+    label: 'Needs correction',
+    blurb: 'Identified a concrete error or omission.',
+  },
+};
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let data:
+  | Awaited<ReturnType<typeof client.listEndorsements>>
+  | null = null;
+try {
+  data = await client.listEndorsements(paper.id);
+} catch (_e) {
+  data = null;
+}
+
+const endorsementItems = Array.isArray(data?.items) ? data.items : [];
+const endorsementAvailable = data !== null && Array.isArray(data.items);
+const verbs = Array.isArray(data?.verbs) ? data.verbs : Object.keys(VERB_META);
+const canSubmit = Boolean(me?.authenticated) && me?.user?.did !== paper.submitterDid;
+const reasonBlocked = !me?.authenticated
+  ? 'Sign in to endorse.'
+  : me?.user?.did === paper.submitterDid
+    ? 'You cannot endorse your own paper.'
+    : null;
+
+const totals =
+  data?.stats?.byVerb && typeof data.stats.byVerb === 'object' ? data.stats.byVerb : {};
+const total = typeof data?.stats?.total === 'number' ? data.stats.total : 0;
+const targetUri = paper.uri ?? `openxiv:${paper.openxivUrlId ?? paper.id}`;
+---
+<article class="card endorse-panel" aria-labelledby="endorse-heading">
+  <header class="endorse-head">
+    <h2 id="endorse-heading">Endorsements</h2>
+    <p class="muted endorse-subtitle">
+      Typed signals from other researchers — not generic likes. Each verb is
+      a different claim about <em>what was done</em> with the paper.
+    </p>
+  </header>
+
+  {!endorsementAvailable && (
+    <p class="muted">Endorsements are temporarily unavailable.</p>
+  )}
+
+  {endorsementAvailable && total === 0 && (
+    <p class="muted endorse-empty">
+      No endorsements yet. {canSubmit ? 'Be the first to add one below.' : reasonBlocked ?? ''}
+    </p>
+  )}
+
+  {endorsementAvailable && total > 0 && (
+    <ul class="endorse-bars" aria-label="Endorsement counts by verb">
+      {verbs.map((v) => {
+        const n = totals[v] ?? 0;
+        if (n === 0) return null;
+        const meta = VERB_META[v] ?? { label: v, blurb: '' };
+        const pct = total > 0 ? Math.max(8, Math.round((n / total) * 100)) : 0;
+        return (
+          <li class="endorse-bar">
+            <span class="endorse-bar-label" title={meta.blurb}>{meta.label}</span>
+            <span class="endorse-bar-track" aria-hidden="true">
+              <span class="endorse-bar-fill" style={`width:${pct}%`}></span>
+            </span>
+            <span class="muted endorse-bar-count">{n}</span>
+          </li>
+        );
+      })}
+    </ul>
+  )}
+
+  {canSubmit && (
+    <form id="endorse-form" class="endorse-form" data-paper-id={paper.id} data-paper-uri={targetUri}>
+      <label class="endorse-field-label" for="endorse-verb">Add your endorsement</label>
+      <div class="endorse-row">
+        <select id="endorse-verb" name="verb" class="input" required>
+          {verbs.map((v) => {
+            const meta = VERB_META[v] ?? { label: v, blurb: '' };
+            return <option value={v}>{meta.label}</option>;
+          })}
+        </select>
+        <input
+          id="endorse-note"
+          name="note"
+          class="input"
+          maxlength="500"
+          placeholder="Optional note (one short sentence)"
+        />
+        <button class="btn btn-primary" type="submit">Endorse</button>
+      </div>
+      <p id="endorse-status" class="muted endorse-status" aria-live="polite"></p>
+    </form>
+  )}
+
+  {!canSubmit && reasonBlocked && (
+    <p class="muted endorse-blocked">{reasonBlocked}</p>
+  )}
+
+  {endorsementAvailable && endorsementItems.length > 0 && (
+    <details class="endorse-recent">
+      <summary class="muted">Recent endorsements ({endorsementItems.length})</summary>
+      <ul class="endorse-list">
+        {endorsementItems.slice(0, 10).map((e) => {
+          const meta = e.verb ? VERB_META[e.verb] ?? null : null;
+          return (
+            <li class="endorse-row-item">
+              <span class="endorse-verb-pill">{meta?.label ?? e.verb ?? 'untyped'}</span>
+              <span class="muted endorse-did">{e.endorserDid.slice(0, 24)}…</span>
+              {e.note && <p class="endorse-note">{e.note}</p>}
+            </li>
+          );
+        })}
+      </ul>
+    </details>
+  )}
+</article>
+
+<script is:inline>
+  (function () {
+    var form = document.getElementById('endorse-form');
+    if (!form) return;
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      var paperId = form.getAttribute('data-paper-id');
+      var paperUri = form.getAttribute('data-paper-uri') || paperId;
+      var verb = (form.querySelector('#endorse-verb') || {}).value;
+      var note = (form.querySelector('#endorse-note') || {}).value;
+      var status = document.getElementById('endorse-status');
+      if (status) status.textContent = 'Saving…';
+      if (typeof window.openxivTrack === 'function') {
+        window.openxivTrack('endorse_click', paperUri, 'openxiv_paper', { verb: verb });
+      }
+      try {
+        var res = await fetch('/api-proxy/papers/' + encodeURIComponent(paperId) + '/endorsements', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ verb: verb, note: note || undefined }),
+        });
+        if (!res.ok) {
+          var txt = await res.text();
+          throw new Error('HTTP ' + res.status + ': ' + txt.slice(0, 200));
+        }
+        if (typeof window.openxivTrack === 'function') {
+          window.openxivTrack('endorse_submit', paperUri, 'openxiv_paper', { verb: verb });
+        }
+        if (status) status.textContent = 'Saved. Reloading…';
+        setTimeout(function () { location.reload(); }, 500);
+      } catch (e) {
+        if (status) status.textContent = 'Failed: ' + (e && e.message ? e.message : 'unknown error');
+      }
+    });
+  })();
+</script>
+
+<style>
+  .endorse-panel {
+    padding: clamp(14px, 1.5vw, 16px);
+    min-width: 0;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .endorse-head h2 {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: clamp(16px, 1.4vw, 17px);
+  }
+  .endorse-subtitle { margin: 4px 0 12px; font-size: 13px; }
+  .endorse-subtitle em { font-style: italic; }
+
+  .endorse-bars { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .endorse-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 26%) minmax(0, 1fr) minmax(24px, 32px);
+    gap: 10px;
+    align-items: center;
+    font-size: 13px;
+    min-width: 0;
+  }
+  .endorse-bar-label {
+    color: var(--text-primary);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .endorse-bar-track {
+    height: 6px;
+    background: var(--bg-elev);
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .endorse-bar-fill {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--tone-success)));
+  }
+  .endorse-bar-count { font-size: 12px; text-align: right; }
+
+  .endorse-empty { font-size: 13px; margin: 4px 0 12px; }
+  .endorse-blocked { font-size: 12px; margin: 8px 0 0; }
+
+  .endorse-form { margin-top: 8px; }
+  .endorse-field-label { display: block; font-size: 13px; margin-bottom: 6px; color: var(--text-secondary); }
+  .endorse-row { display: grid; grid-template-columns: 200px 1fr auto; gap: 8px; }
+  .endorse-row .btn,
+  .endorse-row .input {
+    min-height: 44px;
+  }
+  @media (max-width: 540px) { .endorse-row { grid-template-columns: 1fr; } }
+  .endorse-status { font-size: 12px; margin: 6px 0 0; min-height: 1em; }
+
+  .endorse-recent { margin-top: 10px; }
+  .endorse-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .endorse-row-item {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    gap: 8px;
+    align-items: baseline;
+    padding: clamp(8px, 1.2vw, 10px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-base);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .endorse-verb-pill {
+    display: inline-block;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    border-radius: 999px;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .endorse-did {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .endorse-note {
+    grid-column: 1 / -1;
+    margin: 4px 0 0;
+    font-size: 13px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 768px) {
+    .endorse-bar {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 4px;
+    }
+    .endorse-bar-count {
+      text-align: left;
+    }
+  }
+</style>

@@ -1,0 +1,208 @@
+# Production overrides — apply on top of docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
+#
+# Goals:
+#   - everything restarts on failure
+#   - internal services (postgres / redis / minio / grobid) NOT exposed to host
+#   - Caddy in front, only one external service (ports 80/443)
+#   - secrets pulled from /opt/openxiv/.env on the host
+
+name: openxiv
+
+services:
+  postgres:
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+
+  redis:
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  minio:
+    ports: !reset []
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY}
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  minio-init:
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY}
+    entrypoint: >-
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $$S3_ACCESS_KEY_ID $$S3_SECRET_ACCESS_KEY &&
+      mc mb -p local/openxiv-blobs || true &&
+      mc anonymous set download local/openxiv-blobs || true &&
+      echo 'bucket ready'"
+
+  grobid:
+    image: lfoppiano/grobid:0.8.1
+    ports: !reset []
+    environment:
+      # Cap GROBID Java heap so it fits the 12 GB budget alongside Postgres.
+      JAVA_OPTS: "-Xmx3g -XX:+UseG1GC"
+    # The image ships without curl/wget — the upstream healthcheck (which
+    # invokes `curl -f http://localhost:8070/api/isalive`) is permanently
+    # FAILED on every install of lfoppiano/grobid:0.8.1. We override with
+    # a bash /dev/tcp pseudo-device probe that asks for /api/isalive over
+    # raw HTTP/1.0 and checks the response body for the literal "true".
+    # bash and grep are both present in the image.
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "bash -c 'exec 3<>/dev/tcp/localhost/8070; printf \"GET /api/isalive HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3; head -c 4096 <&3 | grep -qi true'"
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+
+  api:
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      API_PORT: 4000
+      PUBLIC_API_BASE: https://openxiv.net
+      PUBLIC_WEB_BASE: https://openxiv.net
+      DATABASE_URL: postgres://openxiv:openxiv@postgres:5432/openxiv
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: https://openxiv.net
+      S3_REGION: auto
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY}
+      S3_BUCKET: openxiv-blobs
+      S3_FORCE_PATH_STYLE: "true"
+      GROBID_URL: http://grobid:8070
+      USE_MOCK_CLIENTS: "false"
+      USE_MOCK_LLM: "false"
+      USE_MOCK_GROBID: "false"
+      USE_MOCK_ORCID: "false"
+      USE_MOCK_BLUESKY: "false"
+      # Intake runs in the API process and must compile the real source for
+      # preview/GROBID. A mock here produces a blank PDF and dirty metadata.
+      USE_MOCK_TECTONIC: "false"
+      USE_MOCK_LATEXML: "false"
+      USE_MOCK_DETECTOR: "false"
+      RATE_LIMIT_MAX: "60"
+      RATE_LIMIT_WINDOW_MS: "60000"
+      CORS_ORIGINS: "https://openxiv.net,https://www.openxiv.net,https://bsky.social"
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
+      # Override placeholder secrets from base docker-compose.yml — these come
+      # from /opt/openxiv/.env via compose's top-level .env variable substitution.
+      SESSION_SECRET: ${SESSION_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  worker:
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      OPENXIV_RUN_MIGRATIONS: "false"
+      DATABASE_URL: postgres://openxiv:openxiv@postgres:5432/openxiv
+      REDIS_URL: redis://redis:6379
+      WORKER_COMPILE_CONCURRENCY: "1"
+      WORKER_EMBED_CONCURRENCY: "2"
+      WORKER_EXPLAIN_CONCURRENCY: "2"
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: https://openxiv.net
+      S3_REGION: auto
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY}
+      S3_BUCKET: openxiv-blobs
+      S3_FORCE_PATH_STYLE: "true"
+      GROBID_URL: http://grobid:8070
+      USE_MOCK_CLIENTS: "false"
+      USE_MOCK_LLM: "false"
+      USE_MOCK_GROBID: "false"
+      # USE_MOCK_TECTONIC flipped to false — real Tectonic binary
+      # installed in the worker image (Alpine community pkg). The
+      # client adapter (packages/clients/src/compiler/tectonic.ts)
+      # now spawns the binary directly; the DooD path is gone.
+      USE_MOCK_TECTONIC: "false"
+      # LaTeXML is installed in the worker image and must succeed before the
+      # saga can publish. Mocking is forbidden in production.
+      USE_MOCK_LATEXML: "false"
+      USE_MOCK_DETECTOR: "false"
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0}
+      SESSION_SECRET: ${SESSION_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+    deploy:
+      resources:
+        limits:
+          memory: 1500m
+
+  web:
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 4321
+      PUBLIC_API_BASE: https://openxiv.net
+      PUBLIC_WEB_BASE: https://openxiv.net
+      INTERNAL_API_BASE: http://api:4000
+      # Twitter Pixel — read at SSR time by TwitterPixel.astro via
+      # import.meta.env. Client-side React islands (HandlePicker,
+      # SubmissionWizard) use the same names but their values get
+      # inlined at *build* time; the source code carries the launch
+      # defaults as fallback so a missing build-time var doesn't
+      # silently break tracking. The flag below is the only knob we
+      # need at runtime to kill the pixel entirely.
+      PUBLIC_TWITTER_PIXEL_ID: ${PUBLIC_TWITTER_PIXEL_ID:-rch4y}
+      PUBLIC_TWITTER_SIGNUP_EVENT_ID: ${PUBLIC_TWITTER_SIGNUP_EVENT_ID:-tw-rch4y-rch5b}
+      PUBLIC_TWITTER_PAPERSUBMIT_EVENT_ID: ${PUBLIC_TWITTER_PAPERSUBMIT_EVENT_ID:-tw-rch4y-rch5e}
+      PUBLIC_TWITTER_TRACKING_ENABLED: ${PUBLIC_TWITTER_TRACKING_ENABLED:-true}
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          memory: 700m
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+      - web
+      - minio
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  caddy_data:
+  caddy_config:

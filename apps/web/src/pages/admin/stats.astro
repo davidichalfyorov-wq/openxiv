@@ -1,0 +1,87 @@
+---
+import Base from '../../layouts/Base.astro';
+import { serverClient } from '../../lib/api';
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+const me = await client.me().catch(() => null);
+if (!me?.authenticated) {
+  return Astro.redirect(`/auth/sign-in?return=${encodeURIComponent(Astro.url.pathname)}`, 302);
+}
+if (me.user?.role !== 'admin') {
+  return new Response('Forbidden', { status: 403 });
+}
+
+let data: Awaited<ReturnType<typeof client.adminStats>> | null = null;
+let error: string | null = null;
+try {
+  data = await client.adminStats();
+} catch (err) {
+  error = (err as Error).message;
+}
+---
+<Base title="Admin stats — OpenXiv" description="OpenXiv operator analytics.">
+  <main class="container admin-stats-page">
+    <h1 class="title-serif">Admin stats</h1>
+    {error && (
+      <div class="card" style="border-color: var(--tone-caution);">
+        <strong>Stats unavailable.</strong>
+        <p class="muted" style="margin: 6px 0 0;">{error}</p>
+      </div>
+    )}
+    {data && (
+      <>
+        <p class="muted">Generated at {data.generatedAt}</p>
+        <div class="row admin-actions">
+          <a class="btn btn-sm" href="/me/submissions">My submissions</a>
+          <a class="btn btn-sm" href="/admin/moderation">Moderation queue</a>
+        </div>
+        <section class="admin-kpis">
+          {[
+            ['Submissions', data.totalSubmissions],
+            ['Endorsements', data.totalEndorsements],
+            ['DAU', data.dau],
+          ].map(([label, value]) => (
+            <div class="card admin-kpi">
+              <span class="muted">{label}</span>
+              <strong>{value}</strong>
+            </div>
+          ))}
+        </section>
+        <section class="card">
+          <h2>Trending papers</h2>
+          {data.trending.length > 0 ? (
+            <ol>
+              {data.trending.map((item) => (
+                <li>
+                  <code>{item.targetUri}</code>
+                  <strong>{item.views24h}</strong>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p class="muted">No paper views in the last 24h.</p>
+          )}
+        </section>
+      </>
+    )}
+  </main>
+</Base>
+
+<style>
+  .admin-stats-page { max-width: 980px; }
+  .admin-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .admin-actions { gap: 8px; margin: 12px 0 4px; }
+  .admin-kpi { padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+  .admin-kpi strong { font-family: var(--font-serif); font-size: 28px; }
+  h2 { margin: 0 0 10px; font-family: var(--font-serif); font-size: 18px; }
+  ol { margin: 0; padding-left: 22px; }
+  li { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 6px 0; }
+  code { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+</style>

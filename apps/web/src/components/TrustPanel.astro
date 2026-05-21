@@ -1,0 +1,431 @@
+---
+import type { TrustLane, TrustPassport, TrustLaneState } from '../lib/api';
+
+interface Props {
+  trust: TrustPassport;
+  paperPath?: string;
+}
+const { trust, paperPath } = Astro.props;
+const passportHref = paperPath ? `${paperPath}/passport` : null;
+const passportJsonHref = paperPath ? `${paperPath}/passport.json` : null;
+
+function pendingLane(label: string): TrustLane {
+  return {
+    state: 'pending',
+    score: 0,
+    confidence: 0,
+    issueLevel: 'watch',
+    checks: [
+      {
+        label,
+        passed: false,
+        status: 'pending',
+        note: 'This lane has not been computed by the API version serving this paper yet.',
+      },
+    ],
+    nextActions: [],
+  };
+}
+
+const LANES = [
+  {
+    key: 'transparency',
+    label: 'Transparency',
+    lane: trust.transparency ?? pendingLane('Transparency lane'),
+    blurb: 'How legible the AI use, methods and summaries are.',
+  },
+  {
+    key: 'identity',
+    label: 'Identity',
+    lane: trust.identity ?? pendingLane('Identity lane'),
+    blurb: 'Whether the people making this claim are identifiable.',
+  },
+  {
+    key: 'provenance',
+    label: 'Provenance',
+    lane: trust.provenance ?? pendingLane('Provenance lane'),
+    blurb: 'Whether source, rendered artifacts, hashes, and lifecycle records line up.',
+  },
+  {
+    key: 'citations',
+    label: 'Citations',
+    lane: trust.citations ?? pendingLane('Citations lane'),
+    blurb: 'Whether references, citation markers, and resolvable identifiers are visible.',
+  },
+  {
+    key: 'math',
+    label: 'Math',
+    lane: trust.math ?? pendingLane('Math lane'),
+    blurb: 'Whether math-heavy work exposes formulas, proof structure, and auditable source.',
+  },
+  {
+    key: 'integrity',
+    label: 'Integrity',
+    lane: trust.integrity ?? pendingLane('Integrity lane'),
+    blurb: 'Auditability, detector signals, hashes, and human responsibility.',
+  },
+  {
+    key: 'socialReview',
+    label: 'Social Review',
+    lane: trust.socialReview ?? pendingLane('Social Review lane'),
+    blurb: 'Typed endorsements and unresolved public lane disputes from other researchers.',
+  },
+].map((entry) => ({ ...entry, summary: summarizeTrustLane(entry.lane) }));
+
+function summarizeTrustLane(lane: TrustLane) {
+  return {
+    passed: lane.checks.filter(
+      (check) => (check.status ?? (check.passed ? 'pass' : 'fail')) === 'pass',
+    ).length,
+    attention: lane.checks.filter(
+      (check) => (check.status ?? (check.passed ? 'pass' : 'fail')) === 'fail',
+    ).length,
+    pending: lane.checks.filter(
+      (check) => (check.status ?? (check.passed ? 'pass' : 'fail')) === 'pending',
+    ).length,
+    notApplicable: lane.checks.filter((check) => check.status === 'not_applicable').length,
+    topAction:
+      lane.checks.find((check) => !check.passed && check.action)?.action ?? lane.nextActions?.[0],
+  };
+}
+
+function stateLabel(state: TrustLaneState): string {
+  switch (state) {
+    case 'strong':
+      return 'strong';
+    case 'partial':
+      return 'partial';
+    case 'absent':
+      return 'missing';
+    case 'pending':
+      return 'pending';
+  }
+}
+---
+
+<article class="card trust-panel" aria-labelledby="trust-heading">
+  <header class="trust-head">
+    <h2 id="trust-heading">Trust Passport</h2>
+    <p class="muted trust-subtitle">
+      Independent evidence lanes about how this work was made and reviewed.
+    </p>
+    {
+      passportHref && (
+        <nav class="trust-actions" aria-label="Trust Passport links">
+          <a class="btn btn-sm" href={passportHref}>
+            Full passport
+          </a>
+          <a class="btn btn-sm btn-ghost" href={passportJsonHref ?? passportHref}>
+            JSON-LD
+          </a>
+        </nav>
+      )
+    }
+  </header>
+
+  <div class="trust-lanes">
+    {
+      LANES.map((entry) => (
+        <details class={`trust-lane trust-state-${entry.lane.state}`}>
+          <summary class="trust-lane-summary">
+            <span class="trust-lane-label">
+              <span class="trust-pill" aria-hidden="true">
+                {stateLabel(entry.lane.state)}
+              </span>
+              <span>{entry.label}</span>
+            </span>
+            <span class="muted trust-lane-hint">Details</span>
+          </summary>
+          <p class="muted trust-lane-blurb">{entry.blurb}</p>
+          <h3 class="trust-summary-title">Evidence summary</h3>
+          <div class="trust-lane-meta">
+            <span>
+              <strong>{entry.summary.passed}</strong> passed
+            </span>
+            {entry.summary.attention > 0 && (
+              <span>
+                <strong>{entry.summary.attention}</strong> needs attention
+              </span>
+            )}
+            {entry.summary.pending > 0 && (
+              <span>
+                <strong>{entry.summary.pending}</strong> pending
+              </span>
+            )}
+            {entry.summary.notApplicable > 0 && (
+              <span>
+                <strong>{entry.summary.notApplicable}</strong> not applicable
+              </span>
+            )}
+            {entry.lane.issueLevel && entry.lane.issueLevel !== 'none' && (
+              <span>{entry.lane.issueLevel.replace('-', ' ')}</span>
+            )}
+          </div>
+          {entry.summary.topAction && (
+            <p class="muted trust-top-action">{entry.summary.topAction}</p>
+          )}
+          <ul class="trust-checks">
+            {entry.lane.checks.map((c) => (
+              <li class={`trust-check ${c.passed ? 'trust-check-pass' : 'trust-check-fail'}`}>
+                <span class="trust-check-marker" aria-hidden="true">
+                  {c.passed ? (
+                    <svg viewBox="0 0 16 16" width="12" height="12">
+                      <path
+                        d="M3 8l3.2 3.2L13 4.6"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 16 16" width="12" height="12">
+                      <circle
+                        cx="8"
+                        cy="8"
+                        r="3.6"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                      />
+                    </svg>
+                  )}
+                </span>
+                <span class="trust-check-text">
+                  <strong>{c.label}</strong>
+                  <span class="muted"> — {c.note}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {entry.lane.nextActions && entry.lane.nextActions.length > 0 && (
+            <ul class="trust-actions-list">
+              {entry.lane.nextActions.map((action) => (
+                <li>{action}</li>
+              ))}
+            </ul>
+          )}
+        </details>
+      ))
+    }
+  </div>
+</article>
+<style>
+  .trust-panel {
+    padding: clamp(14px, 1.5vw, 16px);
+    min-width: 0;
+    overflow: visible;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .trust-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    align-items: start;
+  }
+  .trust-head h2 {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: clamp(16px, 1.4vw, 17px);
+  }
+  .trust-subtitle {
+    margin: 4px 0 14px;
+    font-size: 13px;
+    max-width: 48ch;
+  }
+  .trust-subtitle em {
+    font-style: italic;
+  }
+  .trust-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    margin: 0 0 14px;
+    min-width: 0;
+  }
+  .trust-actions .btn {
+    min-height: 44px;
+  }
+
+  .trust-lanes {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .trust-lane {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-base);
+    padding: 8px 10px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .trust-lane[open] {
+    background: var(--bg-elev);
+  }
+  .trust-lane-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    list-style: none;
+    font-size: 13.5px;
+    min-width: 0;
+    min-height: 44px;
+  }
+  .trust-lane-summary::-webkit-details-marker {
+    display: none;
+  }
+  .trust-lane-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex-wrap: wrap;
+    overflow-wrap: anywhere;
+  }
+  .trust-lane-hint {
+    flex: none;
+    font-size: 11px;
+  }
+  .trust-lane-blurb {
+    margin: 6px 0 4px;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  .trust-summary-title {
+    margin: 8px 0 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    letter-spacing: 0.04em;
+  }
+  .trust-lane-meta {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 11px;
+    margin-bottom: 4px;
+    min-width: 0;
+  }
+  .trust-lane-meta span {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 1px 7px;
+    color: var(--text-secondary);
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .trust-lane-meta strong {
+    color: var(--text-primary);
+  }
+  .trust-top-action {
+    margin: 6px 0 0;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+
+  .trust-pill {
+    display: inline-block;
+    flex: none;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+  }
+  .trust-state-strong .trust-pill {
+    color: var(--tone-success);
+    background: color-mix(in srgb, var(--tone-success) 14%, transparent);
+  }
+  .trust-state-partial .trust-pill {
+    color: var(--tone-info);
+    background: color-mix(in srgb, var(--tone-info) 14%, transparent);
+  }
+  .trust-state-absent .trust-pill {
+    color: var(--tone-caution);
+    background: color-mix(in srgb, var(--tone-caution) 12%, transparent);
+  }
+  .trust-state-pending .trust-pill {
+    color: var(--text-secondary);
+    background: transparent;
+  }
+
+  .trust-state-strong {
+    border-color: color-mix(in srgb, var(--tone-success) 45%, var(--border));
+  }
+  .trust-state-partial {
+    border-color: color-mix(in srgb, var(--tone-info) 45%, var(--border));
+  }
+  .trust-state-absent {
+    border-color: color-mix(in srgb, var(--tone-caution) 45%, var(--border));
+  }
+
+  .trust-checks {
+    margin: 6px 0 2px;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .trust-check {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: start;
+    gap: 6px;
+    font-size: 12px;
+    min-width: 0;
+  }
+  .trust-check-marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+  }
+  .trust-check-pass .trust-check-marker {
+    color: var(--tone-success);
+  }
+  .trust-check-fail .trust-check-marker {
+    color: var(--text-tertiary);
+  }
+  .trust-check-text strong {
+    font-weight: 600;
+  }
+  .trust-check-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .trust-actions-list {
+    margin: 7px 0 0;
+    padding-left: 18px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 560px) {
+    .trust-panel {
+      padding: 14px;
+    }
+    .trust-head {
+      grid-template-columns: 1fr;
+    }
+    .trust-actions {
+      justify-content: flex-start;
+    }
+    .trust-lane-summary {
+      align-items: flex-start;
+    }
+  }
+</style>

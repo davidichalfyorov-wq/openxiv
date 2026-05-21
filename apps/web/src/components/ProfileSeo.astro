@@ -1,0 +1,115 @@
+---
+/**
+ * SEO + JSON-LD for /u/{handle} (and the alias /@{handle}). Renders:
+ *  - canonical link
+ *  - Open Graph profile meta
+ *  - JSON-LD WebPage of `@type` ProfilePage containing a Person, sameAs
+ *    array (ORCID, Bluesky DID), and authoredEntity for the most recent
+ *    OpenXiv papers.
+ *
+ * No PII leaks: only fields already publicly exposed on the profile page
+ * make it into the structured data. Bio text is escaped via the same
+ * safeJsonLd path used by PaperMeta.
+ */
+interface ProfileLike {
+  did: string;
+  handle: string | null;
+  displayName: string;
+  avatarUrl: string | null;
+  orcid: string | null;
+  bio: string | null;
+}
+
+interface RecentPaper {
+  paperId: string;
+  title: string;
+  openxivId: string | null;
+  openxivUrlId: string | null;
+  publishedAt: string | null;
+}
+
+interface Props {
+  profile: ProfileLike;
+  recentPapers: RecentPaper[];
+  /** The canonical URL for *this* viewing — usually `/u/{handle}` on prod. */
+  canonical: string;
+}
+
+const { profile, recentPapers, canonical } = Astro.props;
+
+const publicBase = import.meta.env.PUBLIC_WEB_BASE ?? 'http://localhost:4321';
+
+// XSS-safe JSON-LD: escape characters that could break out of the script
+// block. Mirrors PaperMeta's `safeJsonLd` so changes stay in sync.
+const LS_RE = new RegExp('\\u2028', 'g');
+const PS_RE = new RegExp('\\u2029', 'g');
+function safeJsonLd(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(LS_RE, '\\u2028')
+    .replace(PS_RE, '\\u2029');
+}
+
+const sameAs: string[] = [];
+if (profile.orcid) sameAs.push(`https://orcid.org/${profile.orcid}`);
+// AT-Proto / Bluesky public profile lookup by DID. Adding the bsky.app
+// canonical and the authoritative DID Document URL gives crawlers two
+// independent ways to confirm the identity.
+if (profile.did.startsWith('did:plc:')) {
+  sameAs.push(`https://bsky.app/profile/${profile.did}`);
+  sameAs.push(`https://plc.directory/${profile.did}`);
+} else if (profile.did.startsWith('did:web:')) {
+  // For did:web:openxiv.net:u:{subject} the canonical resolver URL is
+  // https://openxiv.net/u/{subject}/did.json. We compute it from the
+  // DID per the did:web spec.
+  const tail = profile.did.replace(/^did:web:[^:]+:?/, '').replace(/:/g, '/');
+  if (tail) {
+    sameAs.push(`${publicBase}/${tail}/did.json`);
+  }
+}
+
+const personUrl = canonical;
+
+const personLd: Record<string, unknown> = {
+  '@type': 'Person',
+  name: profile.displayName,
+  url: personUrl,
+  ...(profile.bio ? { description: profile.bio } : {}),
+  ...(profile.avatarUrl ? { image: profile.avatarUrl } : {}),
+  identifier: profile.did,
+  ...(sameAs.length > 0 ? { sameAs } : {}),
+};
+
+const authored = recentPapers.slice(0, 20).map((p) => ({
+  '@type': 'ScholarlyArticle',
+  name: p.title,
+  identifier: p.openxivId ?? p.paperId,
+  url: `${publicBase}/abs/${p.openxivUrlId ?? p.paperId}`,
+  ...(p.publishedAt ? { datePublished: p.publishedAt.slice(0, 10) } : {}),
+}));
+
+if (authored.length > 0) personLd.authoredEntity = authored;
+
+const profilePageLd = {
+  '@context': 'https://schema.org',
+  '@type': 'ProfilePage',
+  url: canonical,
+  mainEntity: personLd,
+  ...(authored.length > 0 ? { numberOfItems: authored.length } : {}),
+};
+---
+<link rel="canonical" href={canonical} />
+<meta property="og:type" content="profile" />
+<meta property="og:title" content={profile.displayName} />
+{profile.bio && <meta property="og:description" content={profile.bio.slice(0, 240)} />}
+<meta property="og:url" content={canonical} />
+<meta property="og:site_name" content="OpenXiv" />
+{profile.avatarUrl && <meta property="og:image" content={profile.avatarUrl} />}
+<meta property="profile:username" content={profile.handle ?? profile.did} />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content={profile.displayName} />
+{profile.bio && <meta name="twitter:description" content={profile.bio.slice(0, 200)} />}
+
+<script is:inline type="application/ld+json" set:html={safeJsonLd(profilePageLd)} />

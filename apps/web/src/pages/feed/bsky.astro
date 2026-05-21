@@ -1,0 +1,128 @@
+---
+import Base from '../../layouts/Base.astro';
+import { serverClient } from '../../lib/api';
+import { extractOpenXivExternalEmbed } from '../../lib/bsky-embed';
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+const cursor = Astro.url.searchParams.get('cursor') ?? undefined;
+let timeline: Awaited<ReturnType<typeof client.bskyTimeline>> | null = null;
+let error: string | null = null;
+
+try {
+  timeline = await client.bskyTimeline({ limit: 30, ...(cursor ? { cursor } : {}) });
+} catch (err) {
+  error = (err as Error).message;
+}
+
+const items = timeline?.feed ?? [];
+---
+<Base title="Bluesky feed — OpenXiv">
+  <main class="container">
+    <header class="feed-head">
+      <h1 class="title-serif">Bluesky Feed</h1>
+      <a class="btn btn-sm" href="/feeds">OpenXiv feeds</a>
+    </header>
+
+    {error && (
+      <div class="card feed-error">
+        <strong>Bluesky feed unavailable</strong>
+        <p class="muted">{error}</p>
+      </div>
+    )}
+
+    <div class="stack">
+      {items.map((item) => {
+        const post = item.post;
+        const record = post?.record;
+        const author = post?.author;
+        const text = record?.text ?? '';
+        const openxivEmbed = extractOpenXivExternalEmbed(post?.embed ?? record?.embed);
+        const createdAt = record?.createdAt ? new Date(record.createdAt).toLocaleString() : '';
+        return (
+          <article class="card bsky-post">
+            <div class="muted post-meta">
+              <span>@{author?.handle ?? 'unknown'}</span>
+              {author?.displayName && <span>{author.displayName}</span>}
+              {createdAt && <time>{createdAt}</time>}
+            </div>
+            <p>{text}</p>
+            {openxivEmbed && (
+              <a class="openxiv-embed" href={openxivEmbed.path}>
+                <span class="openxiv-embed-label">OpenXiv preprint</span>
+                <strong>{openxivEmbed.title}</strong>
+                {openxivEmbed.description && <span>{openxivEmbed.description}</span>}
+              </a>
+            )}
+            {post?.uri && (
+              <a class="muted post-uri" href={`https://bsky.app/profile/${encodeURIComponent(post.uri.split('/')[2] ?? '')}/post/${encodeURIComponent(post.uri.split('/').pop() ?? '')}`} target="_blank" rel="noreferrer">
+                {post.uri}
+              </a>
+            )}
+          </article>
+        );
+      })}
+      {!error && items.length === 0 && <p class="muted">No Bluesky posts available.</p>}
+    </div>
+
+    {timeline?.cursor && (
+      <nav class="feed-pager">
+        <a class="btn" href={`/feed/bsky?cursor=${encodeURIComponent(timeline.cursor)}`}>Next page</a>
+      </nav>
+    )}
+  </main>
+</Base>
+
+<style>
+  .feed-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .feed-error {
+    border-color: var(--tone-caution);
+    margin-bottom: 16px;
+  }
+  .bsky-post p {
+    white-space: pre-wrap;
+    margin: 8px 0;
+  }
+  .post-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 13px;
+  }
+  .post-uri {
+    display: block;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+  }
+  .openxiv-embed {
+    display: grid;
+    gap: 4px;
+    margin: 10px 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: inherit;
+    text-decoration: none;
+  }
+  .openxiv-embed:hover {
+    border-color: var(--tone-info);
+  }
+  .openxiv-embed-label {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .openxiv-embed span:last-child {
+    color: var(--muted);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+  .feed-pager {
+    margin-top: 18px;
+  }
+</style>

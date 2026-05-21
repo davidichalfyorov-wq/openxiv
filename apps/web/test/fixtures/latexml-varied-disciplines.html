@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel="stylesheet" href="LaTeXML.css" />
+    <style>
+      .ltx_page_main {
+        width: 45em;
+      }
+    </style>
+  </head>
+  <body>
+    <article>
+      <section>
+        <h2>Quantum biology example</h2>
+        <p>
+          Inline energy
+          <math class="ltx_Math" display="inline"
+            ><semantics
+              ><mrow><mi>E</mi><mo>=</mo><mi>h</mi><mi>ν</mi></mrow
+              ><annotation encoding="application/x-tex">E=h\nu</annotation></semantics
+            ></math
+          >
+          remains inside a single paragraph with prose on both sides.
+        </p>
+        <p>
+          See <a href="#bib.ref1">[1]</a>, <a href="#bib.ref1">[1]</a>, <a href="#bib.ref1">[1]</a>,
+          <a href="#bib.ref1">[1]</a>, and <a href="#bib.ref1">[1]</a> for related results.
+        </p>
+        <figure>
+          <svg width="800pt" height="240pt">
+            <g><text x="40" y="20">TikZ text must not be cropped</text></g>
+          </svg>
+        </figure>
+        <table>
+          <tbody>
+            <tr>
+              <td>long-column</td>
+              <td>another-column</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+      <section>
+        <h2>References</h2>
+        <ul>
+          <li id="bib.ref1">
+            A. Researcher. arXiv:2301.01234, hep-th/9901001, DOI 10.1145/123.456. Malformed 10. and
+            arXiv:bad should not link.
+          </li>
+        </ul>
+      </section>
+    </article>
+  </body>
+</html>

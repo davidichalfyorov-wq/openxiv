@@ -1,0 +1,262 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { serverClient } from '../../../lib/api';
+
+const id = Astro.params.id;
+if (!id) return new Response('Missing id', { status: 400 });
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let me: Awaited<ReturnType<typeof client.me>> | null = null;
+try {
+  me = await client.me();
+} catch {
+  me = { authenticated: false };
+}
+
+let paper: Awaited<ReturnType<typeof client.getPaper>> | null = null;
+try {
+  paper = await client.getPaper(id);
+} catch {
+  paper = null;
+}
+
+const isOwner = Boolean(me?.authenticated) && paper !== null && me?.user?.did === paper.submitterDid;
+const isAdmin = me?.user?.role === 'admin' || me?.user?.role === 'moderator';
+const canEdit = isOwner || isAdmin;
+
+const oneHard = paper?.oneHardQuestion ?? '';
+const thread = paper?.launchKit?.bridgeThread ?? [''];
+const invites = paper?.launchKit?.reviewerInvites ?? [''];
+const claims = paper?.launchKit?.claimCards ?? [];
+---
+<Base title={paper ? `Launch kit — ${paper.title}` : 'Launch kit'} description="Author-only post-publish launch kit.">
+  <main class="container">
+    <p class="muted launch-trail"><a href={`/abs/${id}`}>← {paper?.title ?? id}</a></p>
+
+    {!paper && (
+      <article class="card">
+        <h1>Paper not found</h1>
+      </article>
+    )}
+
+    {paper && !canEdit && (
+      <article class="card">
+        <h1 class="title-serif">Launch kit</h1>
+        <p class="muted">
+          The launch kit is editable by the paper's author. You're seeing
+          this page because the URL is public; nothing here is mutable
+          without the author's session.
+        </p>
+        {oneHard && (
+          <section class="launch-section">
+            <h2>One hard question</h2>
+            <blockquote class="launch-onehard-block">{oneHard}</blockquote>
+          </section>
+        )}
+      </article>
+    )}
+
+    {paper && canEdit && (
+      <article class="card launch">
+        <header>
+          <h1 class="title-serif">Launch kit</h1>
+          <p class="muted launch-blurb">
+            Polish what readers see <em>after</em> they click through. None
+            of this changes the paper itself — it's the surrounding
+            advocacy material. Submit each section independently.
+          </p>
+        </header>
+
+        <section class="launch-section">
+          <h2>One hard question</h2>
+          <p class="muted launch-section-blurb">
+            The single open problem you most want serious readers to engage
+            with. Pinned to your /abs page below the abstract.
+          </p>
+          <form class="launch-form" data-launch-form data-field="oneHardQuestion">
+            <textarea name="oneHardQuestion" rows="3" maxlength="400" class="input">{oneHard}</textarea>
+            <div class="row" style="justify-content: space-between;">
+              <span class="muted launch-tip">Stay narrow — one specific question, not a research agenda.</span>
+              <button class="btn btn-primary" type="submit">Save question</button>
+            </div>
+            <p class="muted launch-status" data-launch-status></p>
+          </form>
+        </section>
+
+        <section class="launch-section">
+          <h2>Bluesky thread (replaces the bridge post)</h2>
+          <p class="muted launch-section-blurb">
+            Up to 5 posts, ~280 chars each. The bridge worker will publish
+            them as a thread instead of the default single bridge post.
+          </p>
+          <form class="launch-form" data-launch-form data-field="bridgeThread">
+            <div class="launch-thread" data-thread>
+              {thread.map((t, i) => (
+                <div class="launch-thread-item">
+                  <span class="muted launch-thread-num">{i + 1}</span>
+                  <textarea name="thread[]" rows="3" maxlength="300" class="input">{t}</textarea>
+                </div>
+              ))}
+            </div>
+            <div class="row" style="justify-content: space-between; margin-top: 8px;">
+              <button class="btn btn-sm" type="button" data-thread-add>+ add post</button>
+              <button class="btn btn-primary" type="submit">Save thread</button>
+            </div>
+            <p class="muted launch-status" data-launch-status></p>
+          </form>
+        </section>
+
+        <section class="launch-section">
+          <h2>Reviewer invites</h2>
+          <p class="muted launch-section-blurb">
+            Researchers you'd want to read this. One per line. These surface
+            on the paper page as a "who'd I love to hear from" list — not
+            spam-mailed.
+          </p>
+          <form class="launch-form" data-launch-form data-field="reviewerInvites">
+            <textarea name="reviewerInvites" rows="6" maxlength="2000" class="input">{invites.join('\n')}</textarea>
+            <div class="row" style="justify-content: flex-end;">
+              <button class="btn btn-primary" type="submit">Save invites</button>
+            </div>
+            <p class="muted launch-status" data-launch-status></p>
+          </form>
+        </section>
+
+        <section class="launch-section">
+          <h2>Claim cards</h2>
+          <p class="muted launch-section-blurb">
+            Up to 5 single-claim cards (headline + one-sentence support).
+            Surfaced under the abstract so readers see exactly what you're
+            claiming without parsing prose.
+          </p>
+          <form class="launch-form" data-launch-form data-field="claimCards">
+            <div class="launch-claims" data-claims>
+              {[...Array(Math.max(claims.length + 1, 1)).keys()].map((i) => (
+                <div class="launch-claim">
+                  <input
+                    class="input"
+                    name="claimHeadline[]"
+                    maxlength="140"
+                    placeholder="One claim (headline)"
+                    value={claims[i]?.headline ?? ''}
+                  />
+                  <textarea
+                    class="input"
+                    name="claimSupport[]"
+                    rows="2"
+                    maxlength="500"
+                    placeholder="One sentence of supporting evidence"
+                  >{claims[i]?.supporting ?? ''}</textarea>
+                </div>
+              ))}
+            </div>
+            <div class="row" style="justify-content: flex-end;">
+              <button class="btn btn-primary" type="submit">Save claim cards</button>
+            </div>
+            <p class="muted launch-status" data-launch-status></p>
+          </form>
+        </section>
+
+        <section class="launch-section">
+          <h2>BibTeX</h2>
+          <p class="muted launch-section-blurb">
+            The canonical citation is on the /abs page's Cite panel — share
+            that URL with reviewers who ask "how do I cite this".
+          </p>
+          <a class="btn btn-sm" href={`/abs/${id}#cite-heading`}>Open Cite panel →</a>
+        </section>
+      </article>
+    )}
+  </main>
+</Base>
+
+<script is:inline>
+  (function () {
+    if (!document.body) return;
+    var paperId = location.pathname.split('/').slice(-2, -1)[0];
+
+    document.querySelectorAll('[data-thread-add]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var container = btn.closest('form').querySelector('[data-thread]');
+        var idx = container.querySelectorAll('.launch-thread-item').length;
+        if (idx >= 5) return;
+        var div = document.createElement('div');
+        div.className = 'launch-thread-item';
+        div.innerHTML = '<span class="muted launch-thread-num">' + (idx + 1) + '</span><textarea name="thread[]" rows="3" maxlength="300" class="input"></textarea>';
+        container.appendChild(div);
+      });
+    });
+
+    document.querySelectorAll('[data-launch-form]').forEach(function (form) {
+      form.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        var field = form.getAttribute('data-field');
+        var status = form.querySelector('[data-launch-status]');
+        if (status) status.textContent = 'Saving…';
+        var body = {};
+        if (field === 'oneHardQuestion') {
+          var ta = form.querySelector('textarea[name="oneHardQuestion"]');
+          body.oneHardQuestion = (ta.value || '').trim() || null;
+        } else if (field === 'bridgeThread') {
+          var posts = Array.from(form.querySelectorAll('textarea[name="thread[]"]'))
+            .map(function (t) { return t.value.trim(); })
+            .filter(function (t) { return t.length > 0; });
+          body.launchKit = { bridgeThread: posts };
+        } else if (field === 'reviewerInvites') {
+          var lines = form.querySelector('textarea[name="reviewerInvites"]').value
+            .split(/\r?\n/)
+            .map(function (s) { return s.trim(); })
+            .filter(function (s) { return s.length > 0; })
+            .slice(0, 10);
+          body.launchKit = { reviewerInvites: lines };
+        } else if (field === 'claimCards') {
+          var heads = Array.from(form.querySelectorAll('input[name="claimHeadline[]"]')).map(function (i) { return i.value.trim(); });
+          var supps = Array.from(form.querySelectorAll('textarea[name="claimSupport[]"]')).map(function (t) { return t.value.trim(); });
+          var cards = [];
+          for (var i = 0; i < heads.length; i++) {
+            if (heads[i]) cards.push({ headline: heads[i], supporting: supps[i] || '' });
+          }
+          body.launchKit = { claimCards: cards };
+        }
+        try {
+          var res = await fetch('/api-proxy/papers/' + encodeURIComponent(paperId) + '/launch-kit', {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          if (status) status.textContent = 'Saved.';
+          setTimeout(function () { if (status) status.textContent = ''; }, 2000);
+        } catch (e) {
+          if (status) status.textContent = 'Failed: ' + (e && e.message ? e.message : 'unknown');
+        }
+      });
+    });
+  })();
+</script>
+
+<style>
+  .launch-trail { font-size: 13px; margin: 0 0 12px; }
+  .launch { padding: 22px 26px; max-width: 760px; }
+  .launch-blurb { margin: 4px 0 12px; font-size: 14px; max-width: 60ch; }
+  .launch-section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .launch-section h2 { font-family: var(--font-serif); font-size: 16px; margin: 0 0 6px; }
+  .launch-section-blurb { margin: 0 0 8px; font-size: 13px; max-width: 60ch; }
+  .launch-form { display: flex; flex-direction: column; gap: 6px; }
+  .launch-form .input { width: 100%; font-family: var(--font-sans); }
+  .launch-form textarea { resize: vertical; }
+  .launch-status { font-size: 12px; min-height: 1em; }
+  .launch-tip { font-size: 12px; }
+
+  .launch-thread { display: flex; flex-direction: column; gap: 6px; }
+  .launch-thread-item { display: grid; grid-template-columns: 22px 1fr; gap: 6px; align-items: start; }
+  .launch-thread-num { font-family: var(--font-mono); font-size: 12px; padding-top: 8px; }
+
+  .launch-claims { display: flex; flex-direction: column; gap: 8px; }
+  .launch-claim { display: flex; flex-direction: column; gap: 4px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-base); }
+
+  .launch-onehard-block { margin: 8px 0 0; padding: 12px; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent); }
+</style>

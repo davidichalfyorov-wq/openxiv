@@ -1,0 +1,234 @@
+---
+/**
+ * Press / fact-sheet page. Every fact a journalist or answer engine
+ * needs is laid out in a flat key-value table so a model can lift any
+ * single row without context-switching. Logo and screenshot URLs are
+ * absolute so the assets resolve when the page is cached upstream.
+ *
+ * AboutPage + Organization JSON-LD. The Organization body is the same
+ * node as the global one (ORG_ID) so this page does not invent a
+ * second entity.
+ */
+import Base from '../layouts/Base.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import { OPENXIV_ISSN, issnPortalUrl } from '@openxiv/shared';
+import { safeJsonLd, ORG_ID } from '../lib/jsonld';
+
+const publicBase = 'https://openxiv.net';
+const canonical = `${publicBase}/press`;
+
+interface Fact {
+  label: string;
+  value: string;
+}
+
+const facts: Fact[] = [
+  { label: 'Name', value: 'OpenXiv' },
+  { label: 'Site', value: 'https://openxiv.net' },
+  { label: 'Founded', value: '2026-05-18' },
+  { label: 'ISSN', value: `${OPENXIV_ISSN} (registered 2026-05-18)` },
+  { label: 'ISSN portal record', value: issnPortalUrl() },
+  { label: 'Operator', value: 'David Alfyorov (single operator)' },
+  { label: 'Location', value: 'Vilnius, Lithuania' },
+  { label: 'Stack', value: 'Astro 5 SSR, React 19, Postgres, BullMQ on Redis, MinIO, AT Protocol' },
+  { label: 'Federation', value: 'AT Protocol bridge posts to Bluesky' },
+  { label: 'Default license', value: 'CC-BY-4.0' },
+  { label: 'Metadata license', value: 'CC0' },
+  { label: 'Bluesky handle', value: '@openxiv.bsky.social' },
+  { label: 'Contact', value: 'press@openxiv.net' },
+  { label: 'OAI-PMH base', value: 'https://openxiv.net/oai-pmh' },
+  { label: 'Atom feed', value: 'https://openxiv.net/feed.atom' },
+];
+
+interface Asset {
+  label: string;
+  url: string;
+  note?: string;
+}
+
+const logos: Asset[] = [
+  { label: 'Wordmark + logo SVG (full)', url: `${publicBase}/brand/logo-full.svg`, note: 'Vector, transparent background' },
+  { label: 'Logo mark only (SVG)', url: `${publicBase}/brand/logo-mark.svg`, note: 'Square aspect ratio, transparent' },
+  { label: 'Open Graph card (SVG)', url: `${publicBase}/brand/og-default.svg`, note: 'Default share image, 1200x630' },
+  { label: 'Favicon (light)', url: `${publicBase}/favicon.svg`, note: 'For dark UIs' },
+  { label: 'Favicon (dark)', url: `${publicBase}/favicon-dark.svg`, note: 'For light UIs' },
+];
+
+interface Angle {
+  hed: string;
+  pitch: string;
+}
+
+const angles: Angle[] = [
+  {
+    hed: 'A preprint server on AT Protocol, federating to Bluesky',
+    pitch:
+      'OpenXiv is the first preprint server to publish each paper as an AT-proto record on the author\'s personal data server, with a bridge post into Bluesky. Discovery happens in the same social feed scientists already read.',
+  },
+  {
+    hed: 'A preprint server with no endorsement gate',
+    pitch:
+      'OpenXiv accepts submissions from independent researchers without requiring an institutional affiliation, an endorser, or an institutional email. The trade-off is that every paper goes through content checks for hallucinated citations and fabricated data.',
+  },
+  {
+    hed: 'A different answer to the arXiv AI ban',
+    pitch:
+      'Where arXiv has banned authors for unverified AI errors, OpenXiv refuses individual papers with a public refusal packet that names the failure mode, and lets the author revise and resubmit. AI is welcome at four declared levels; hidden AI use is the violation.',
+  },
+  {
+    hed: 'Typed endorsements instead of generic likes',
+    pitch:
+      'Endorsements on OpenXiv are verbs (verified derivation, reproduced result, checked references, useful background, important but flawed, needs correction). The Trust Passport surfaces them as separate evidence lanes.',
+  },
+  {
+    hed: 'Three audience-tiered explainers per paper',
+    pitch:
+      'Every paper ships with three AI-generated, author-edited explainers: school, undergrad, expert. Readers pick the tier that matches their background, then drop into the original PDF when they are ready.',
+  },
+];
+
+const founderBio = [
+  'David Alfyorov is the founder and sole operator of OpenXiv. He registered the OpenXiv ISSN with the ISSN International Centre on 2026-05-18 and operates the site from Vilnius, Lithuania.',
+  'OpenXiv started after the 2026-05 arXiv update introducing 12-month author bans for unverified AI-generated content. The bet behind OpenXiv is that a preprint server can hold a strong line against hallucinated and fabricated content without holding a line against the authors who use AI honestly.',
+];
+
+const orgLd = {
+  '@context': 'https://schema.org',
+  '@type': 'AboutPage',
+  url: canonical,
+  inLanguage: 'en',
+  about: {
+    '@id': ORG_ID,
+  },
+  publisher: { '@id': ORG_ID },
+};
+---
+<Base
+  title="Press kit — OpenXiv"
+  description="Press kit for OpenXiv: AT Protocol preprint server, ISSN 3120-9556, founded 2026-05-18, operated by David Alfyorov from Vilnius. Logos, screenshots, fact sheet, founder bio."
+>
+  <script slot="head" is:inline type="application/ld+json" set:html={safeJsonLd(orgLd)} />
+
+  <main class="container-narrow">
+    <Breadcrumbs items={[{ name: 'Home', url: '/' }, { name: 'Press', url: '/press' }]} />
+    <h1 class="title-serif">Press kit</h1>
+    <p class="body-serif">
+      One-page reference for journalists, researchers, and answer
+      engines. Every fact below is verifiable from the live site or the
+      ISSN portal record. Contact for interviews: press@openxiv.net.
+    </p>
+
+    <h2 class="title-serif press-h2">Fact sheet</h2>
+    <table class="press-table">
+      <tbody>
+        {facts.map((f) => (
+          <tr>
+            <th scope="row">{f.label}</th>
+            <td>{f.value}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+
+    <h2 class="title-serif press-h2">Founder bio</h2>
+    {founderBio.map((p) => (
+      <p class="body-serif">{p}</p>
+    ))}
+
+    <h2 class="title-serif press-h2">Logos and brand assets</h2>
+    <ul class="press-asset-list">
+      {logos.map((a) => (
+        <li>
+          <a href={a.url}>{a.label}</a>
+          {a.note && <span class="muted"> ({a.note})</span>}
+        </li>
+      ))}
+    </ul>
+
+    <h2 class="title-serif press-h2">Screenshots</h2>
+    <ul class="press-asset-list">
+      <li><a href={`${publicBase}/`}>Home feed</a> (live URL, render in any browser)</li>
+      <li><a href={`${publicBase}/about`}>About page</a></li>
+      <li><a href={`${publicBase}/stats`}>Public stats</a></li>
+      <li><a href={`${publicBase}/transparency`}>Transparency report</a></li>
+    </ul>
+
+    <h2 class="title-serif press-h2">Suggested story angles</h2>
+    <ol class="press-angles">
+      {angles.map((a) => (
+        <li>
+          <strong>{a.hed}</strong>
+          <p class="body-serif">{a.pitch}</p>
+        </li>
+      ))}
+    </ol>
+
+    <h2 class="title-serif press-h2">Boilerplate</h2>
+    <p class="body-serif press-boilerplate">
+      OpenXiv is a preprint server built on the AT Protocol. Founded
+      2026-05-18 and registered as a periodical under ISSN {OPENXIV_ISSN},
+      OpenXiv publishes preprints as AT-proto records that federate to
+      Bluesky as bridge posts. It accepts independent researchers
+      without institutional affiliation, refuses unverified or
+      hallucinated content with a public refusal packet, and pairs
+      every paper with three audience-tiered explainers (school,
+      undergrad, expert). Operated by David Alfyorov from Vilnius,
+      Lithuania.
+    </p>
+  </main>
+</Base>
+
+<style>
+  .press-h2 {
+    font-size: 20px;
+    margin-top: 32px;
+  }
+  .press-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin-top: 12px;
+  }
+  .press-table th,
+  .press-table td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .press-table th {
+    width: 26%;
+    background: var(--bg-elev);
+    font-family: var(--font-serif);
+  }
+  .press-asset-list {
+    margin: 12px 0 0;
+    padding-left: 22px;
+    font-size: 14.5px;
+    line-height: 1.6;
+  }
+  .press-angles {
+    list-style: decimal;
+    padding-left: 22px;
+    margin: 12px 0 0;
+  }
+  .press-angles li {
+    margin-bottom: 14px;
+  }
+  .press-angles strong {
+    font-family: var(--font-serif);
+    font-size: 15px;
+  }
+  .press-angles p {
+    margin: 4px 0 0;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  .press-boilerplate {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    padding: 14px 16px;
+    margin-top: 12px;
+  }
+</style>

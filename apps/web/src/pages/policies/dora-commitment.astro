@@ -1,0 +1,98 @@
+---
+import Base from '../../layouts/Base.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+---
+<Base
+  title="DORA commitment — OpenXiv"
+  description="OpenXiv's institutional commitment to the Declaration on Research Assessment. Concrete operational principles, not aspirations."
+>
+  <main class="container-narrow">
+    <Breadcrumbs items={[{ name: 'Home', url: '/' }, { name: 'Policies', url: '/policies' }, { name: 'DORA commitment', url: '/policies/dora-commitment' }]} />
+    <h1 class="title-serif">OpenXiv commitment to the Declaration on Research Assessment (DORA)</h1>
+    <p class="muted">Last reviewed 2026-05-19. Reviewed annually.</p>
+
+    <p class="body-serif">
+      OpenXiv (ISSN 3120-9556) is a DORA signatory. This page describes
+      the operational principles we hold ourselves to as an open-access
+      preprint server. We review this commitment annually and publish
+      updates here when our practices change.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">1. No journal-impact rankings</h2>
+    <p class="body-serif">
+      We do not display or expose journal-impact factor (JIF),
+      CiteScore, h-index, or any equivalent journal-based metric —
+      anywhere in the UI, API, or metadata exports. When a paper is
+      later published in a peer-reviewed journal, we record the
+      bibliographic reference; we do not record the journal's metrics.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">2. Multi-dimensional trust signals, never a single score</h2>
+    <p class="body-serif">
+      Our trust passport reports independent lanes — identity,
+      citation integrity, math integrity, code integrity, data
+      integrity, disclosure compliance — as a vector. We will not
+      introduce a composite trust score, popularity ranking, or
+      leaderboard. Readers calibrate against the dimensions that
+      matter to their use case.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">3. Forensic assessment, falsifiable refusals</h2>
+    <p class="body-serif">
+      Submissions are evaluated against a structured taxonomy of
+      failure modes: hallucinated citations, math errors, methodology
+      violations, plagiarism, scope mismatch, disclosure
+      non-compliance. Refusals cite specific evidence — page numbers,
+      citation identifiers, reproducible checks — and are published
+      with the structured failure code. Authors may respond publicly
+      and may resubmit revised versions. Past refusals do not bar
+      future submissions. The full refusal framework lives in the
+      <a href="/policies/submission">submission policy</a> and the
+      <a href="/policies/code-of-conduct">code of conduct</a>.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">4. Diverse outputs valued on their own merits</h2>
+    <p class="body-serif">
+      Papers, replication studies, negative results, and methods
+      notes receive equal first-class treatment in metadata and DOI
+      assignment. We do not weight outputs by perceived importance
+      or by the prestige of the venues an author has previously
+      published in.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">5. No author popularity dynamics</h2>
+    <p class="body-serif">
+      We do not surface author leaderboards, citation rankings, or
+      aggregate refusal counts on author profiles. Each work is
+      assessed on its own. The author profile page shows publications
+      and endorsements only; it does not aggregate "scores" across
+      them.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Scope acknowledgment</h2>
+    <p class="body-serif">
+      OpenXiv currently accepts LaTeX-source preprints in mathematics
+      and physics. Dataset and software preservation,
+      replication-study tracks, and expanded subject coverage are
+      planned but not yet implemented. We will update this page as
+      scope expands so that stated commitments and operational
+      reality stay aligned.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Responsible operator</h2>
+    <p class="body-serif">
+      David Alfyorov, operator.
+      Contact: <a href="mailto:davidich.alfyorov@gmail.com">davidich.alfyorov@gmail.com</a>.
+      Material changes to this commitment are announced on the
+      <a href="/transparency">transparency report</a> at least 30
+      days before they take effect.
+    </p>
+
+    <p class="muted" style="margin-top: 24px;">
+      Related: <a href="/policies/code-of-conduct">Code of conduct</a>
+      · <a href="/policies/submission">Submission policy</a>
+      · <a href="/transparency">Transparency report</a>
+      · <a href="/policies">All policies</a>.
+    </p>
+  </main>
+</Base>

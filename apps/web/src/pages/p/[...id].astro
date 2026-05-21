@@ -1,0 +1,128 @@
+---
+import Base from '../../layouts/Base.astro';
+import KaTeXHead from '../../components/KaTeXHead.astro';
+import PaperMeta from '../../components/PaperMeta.astro';
+import CiteButton from '../../components/CiteButton.astro';
+import EngagementBadge from '../../components/EngagementBadge.astro';
+import { serverClient } from '../../lib/api';
+
+const slug = Array.isArray(Astro.params.id) ? Astro.params.id.join('/') : Astro.params.id;
+if (!slug) return new Response('Missing paper id', { status: 400 });
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let paper: Awaited<ReturnType<typeof client.getPaper>> | null = null;
+let error: string | null = null;
+try {
+  paper = await client.getPaper(slug);
+} catch (err) {
+  error = (err as Error).message;
+  Astro.response.status = 404;
+}
+
+const targetUri = paper?.uri ?? `openxiv:${paper?.openxivUrlId ?? slug}`;
+
+function bskyWebUrl(uri: string | null | undefined): string | null {
+  if (!uri) return null;
+  const match = /^at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([^/]+)$/.exec(uri);
+  if (!match) return null;
+  const [, repo, rkey] = match;
+  if (!repo || !rkey) return null;
+  return `https://bsky.app/profile/${encodeURIComponent(repo)}/post/${encodeURIComponent(rkey)}`;
+}
+
+const bskyUrl = bskyWebUrl(paper?.latestVersion?.bskyPostUri);
+---
+<Base title={paper?.title ?? 'OpenXiv paper'} description={paper?.abstract?.slice(0, 200) ?? 'OpenXiv paper'}>
+  <Fragment slot="head">
+    {paper && <PaperMeta paper={paper} firstFigureUrl={null} />}
+    <KaTeXHead />
+  </Fragment>
+  <main class="container paper-index-page">
+    {error && (
+      <div class="card" style="border-color: var(--tone-caution);">
+        <strong>Paper not found</strong>
+        <p class="muted" style="margin:6px 0 0;">
+          The id <code>{slug}</code> did not resolve.
+        </p>
+      </div>
+    )}
+
+    {paper && (
+      <article class="paper-index-record">
+        <div class="row paper-index-meta">
+          <a class="badge badge-tone-accent" href={`/topics/${paper.primaryCategory}`}>{paper.primaryCategory}</a>
+          <span class="muted">{paper.publishedAt?.slice(0, 10) ?? paper.createdAt.slice(0, 10)}</span>
+          <span class="muted">{paper.openxivId ?? paper.id}</span>
+        </div>
+        {(bskyUrl || paper.latestVersion?.mastodonStatusUrl) && (
+          <div class="paper-social-badges" aria-label="External publication status">
+            {bskyUrl && (
+              <a class="badge badge-tone-success" href={bskyUrl} target="_blank" rel="noreferrer">Crossposted to Bluesky</a>
+            )}
+            {paper.latestVersion?.mastodonStatusUrl && (
+              <a class="badge badge-tone-success" href={paper.latestVersion.mastodonStatusUrl} target="_blank" rel="noreferrer">Crossposted to Mastodon</a>
+            )}
+          </div>
+        )}
+        <h1 class="title-serif">{paper.title}</h1>
+        <p class="muted">
+          {paper.authors.map((a) => a.displayName).join(', ')}
+        </p>
+        <EngagementBadge paperId={paper.id} doi={paper.doi} />
+        {paper.abstract && (
+          <section>
+            <h2>Abstract</h2>
+            <p class="body-serif">{paper.abstract}</p>
+          </section>
+        )}
+        <div class="paper-index-actions">
+          <a class="btn btn-primary" href={`/abs/${paper.openxivUrlId ?? paper.id}`}>Read full record</a>
+          <CiteButton paper={paper} />
+          {paper.latestVersion?.pdfUrl && (
+            <a
+              class="btn"
+              href={paper.latestVersion.pdfUrl}
+              target="_blank"
+              rel="noreferrer"
+              data-track-event="pdf_download"
+              data-track-target={targetUri}
+            >
+              Download PDF
+            </a>
+          )}
+        </div>
+      </article>
+    )}
+  </main>
+</Base>
+
+{paper && (
+  <script is:inline define:vars={{ targetUri }}>
+    (function () {
+      if (typeof window.openxivTrack !== 'function') return;
+      window.openxivTrack('paper_view', targetUri, 'openxiv_paper', { route: '/p' });
+      document.querySelectorAll('[data-track-event]').forEach(function (el) {
+        el.addEventListener('click', function () {
+          window.openxivTrack(
+            el.getAttribute('data-track-event'),
+            el.getAttribute('data-track-target') || targetUri,
+            'openxiv_paper',
+            { route: '/p' }
+          );
+        });
+      });
+    })();
+  </script>
+)}
+
+<style>
+  .paper-index-page { max-width: 900px; }
+  .paper-index-record { display: flex; flex-direction: column; gap: 12px; }
+  .paper-index-record h1 { margin: 0; }
+  .paper-index-record h2 { margin: 12px 0 8px; font-family: var(--font-serif); font-size: 18px; }
+  .paper-index-meta { gap: 10px; flex-wrap: wrap; }
+  .paper-social-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+  .paper-index-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+</style>

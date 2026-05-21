@@ -1,0 +1,26 @@
+{
+  "lexicon": 1,
+  "id": "app.openxiv.review",
+  "description": "A structured open review attached to a paper. Optional public commentary, scored on confidence.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["paperUri", "text", "createdAt"],
+        "properties": {
+          "paperUri": { "type": "string", "format": "at-uri" },
+          "text": { "type": "string", "minLength": 50, "maxLength": 20000 },
+          "verdict": {
+            "type": "string",
+            "knownValues": ["positive", "mixed", "concerns", "strong-concerns"]
+          },
+          "confidence": { "type": "integer", "minimum": 1, "maximum": 5 },
+          "isReviewerExpert": { "type": "boolean", "default": false },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    }
+  }
+}

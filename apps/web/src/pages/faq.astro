@@ -1,0 +1,166 @@
+---
+/**
+ * Long-form FAQ targeting Google AI Mode 2026 query fan-out. Each answer
+ * is self-contained so a reader who lands here from a model-quoted
+ * snippet does not have to bounce to /about for the next sentence.
+ *
+ * Topics: identity, submission gates, AI policy, peer review, Trust
+ * Passport, explainer tiers, ISSN, DOI status, Bluesky federation,
+ * AT Protocol vs ActivityPub.
+ */
+import Base from '../layouts/Base.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import { OPENXIV_ISSN, issnPortalUrl } from '@openxiv/shared';
+import { safeJsonLd, ORG_ID } from '../lib/jsonld';
+
+interface QA {
+  q: string;
+  a: string;
+}
+
+const faq: QA[] = [
+  {
+    q: 'What is OpenXiv?',
+    a: `OpenXiv is a preprint server built on the AT Protocol. Authors upload preprints as AT-proto records under the app.openxiv.* namespace. Those records live in the author's PDS, federate to Bluesky as bridge posts, and stay queryable through OAI-PMH, JSON-LD, and a public API. The site is registered as a periodical with ISSN ${OPENXIV_ISSN}.`,
+  },
+  {
+    q: 'How is OpenXiv different from arXiv?',
+    a: 'Three differences. First, no endorsement gate: anyone can submit, including independent researchers without an institution. Second, the AI policy refuses individual unverified papers with a public refusal packet that names the failure mode, instead of banning authors for 12 months. Third, every paper is an AT-proto record that federates to Bluesky as a bridge post, so accepted preprints show up in the same social feed where readers already are. arXiv remains the right venue for fields where it is the trusted standard, and cross-posting is fine.',
+  },
+  {
+    q: 'Can I submit a preprint to OpenXiv without an institutional affiliation?',
+    a: 'Yes. OpenXiv is open to independent researchers, retired academics, citizen scientists, and graduate students between affiliations. There is no endorsement requirement, no institutional-email check, and no affiliation field that gates publication. You sign in with ORCID (recommended for researchers) or did:plc through Bluesky and submit. Affiliation is optional metadata, not a filter.',
+  },
+  {
+    q: 'How does AT Protocol enable scholarly publishing?',
+    a: 'AT Protocol gives each author a personal data server (PDS) that holds signed records under reverse-DNS namespaces. OpenXiv defines lexicons under app.openxiv.* (paper, summary, disclosure, endorsement, refusal) and writes those records to the author\'s PDS at submission time. Federation to Bluesky and to the OpenXiv App View is a side effect of the protocol, not a separate integration. The same record that proves authorship is the record indexed for discovery.',
+  },
+  {
+    q: 'How do AI disclosure levels work on OpenXiv?',
+    a: 'Every submission is tagged at one of four disclosure levels: none, assistant (AI helped with drafting, grammar, or search), coauthor (AI generated a substantive portion of the analysis or text), or primary (AI is the principal generative agent). The level is stored on an app.openxiv.disclosure record, mirrored into the JSON-LD payload, rendered as a badge on the paper page, and made filterable in search. Hidden AI use is a policy violation. Correctly disclosed AI use is not.',
+  },
+  {
+    q: 'Does OpenXiv peer review submissions?',
+    a: 'No. OpenXiv is a preprint server, not a peer-reviewed journal. We do screen submissions for unverified or hallucinated content and submission-terms compliance, and we refuse work that fails those checks with a public refusal packet. After publication, typed endorsements from other researchers (verified derivation, reproduced result, checked references, and so on) work as distributed post-publication review.',
+  },
+  {
+    q: 'What is the OpenXiv Trust Passport?',
+    a: 'The Trust Passport is a signed evidence vector attached to each paper. It tracks seven lanes (transparency, identity, provenance, citations, math, integrity, social review) and shows each lane as green, yellow, or red with the underlying evidence items, open disputes, author responses, and any external attestations. It is not a single score. Readers can drill into each lane and decide what weight to give it.',
+  },
+  {
+    q: 'What are OpenXiv explainer tiers?',
+    a: 'Every preprint is published alongside three audience-tiered summaries: school (a curious teenager can follow it), undergrad (you have seen the field), and expert (you are in this specific subfield). The tiers are generated at submission time by an LLM, labelled as AI-generated, persisted as app.openxiv.summary records, and editable by the author. The original PDF is unchanged. If an explainer says something the original does not, the original wins.',
+  },
+  {
+    q: 'Does OpenXiv have an ISSN?',
+    a: `Yes. OpenXiv is registered with the ISSN International Centre under ISSN ${OPENXIV_ISSN}. The registration was issued on 2026-05-18 and the canonical portal record is at ${issnPortalUrl()}. The ISSN appears on every paper as citation_issn (HighWire), in Dublin Core dc.identifier, in the JSON-LD Periodical block, and in OAI-PMH responses as urn:issn:${OPENXIV_ISSN}.`,
+  },
+  {
+    q: 'Do OpenXiv papers get DOIs?',
+    a: 'DOI minting via Crossref is on the preservation roadmap. Until DOIs are issued, the OpenXiv identifier (an ARK-shaped string assigned at acceptance, for example 26.05.0001) is the citable persistent identifier. The ID remains resolvable through the App View and the OAI-PMH endpoint regardless of where the underlying PDS lives.',
+  },
+  {
+    q: 'How does OpenXiv federate to Bluesky?',
+    a: 'When a preprint is accepted, OpenXiv writes a bridge post to the author\'s Bluesky account containing the abstract, an embed card, and a link back to the OpenXiv abstract page. The post is a normal Bluesky record under app.bsky.feed.post. Followers see it in their normal home timeline, threads can reply to it, and likes and reposts propagate back to the App View. The author is already authenticated through their AT Protocol identity, so no separate Bluesky integration is required.',
+  },
+  {
+    q: 'Can independent researchers without affiliation publish on OpenXiv?',
+    a: 'Yes. OpenXiv does not require an endorser, an institutional email, an affiliation, or any third-party introduction. Independent researchers, retired academics, and citizen scientists submit through the same pipeline as everyone else. The same content checks apply to every submission (no hallucinated citations, no fabricated data) regardless of who submits them.',
+  },
+  {
+    q: 'What is an OpenXiv refusal packet?',
+    a: 'When OpenXiv refuses a submission, the refusal is a public document (the refusal packet) that names the specific failure mode, points at the evidence, and explains what would need to change before re-submission. Refusal packets are stored as app.openxiv.refusal records and linked from the submission\'s permanent URL. We refuse the work, not the author. Authors can revise and resubmit, and there is no 12-month ban as on some other servers.',
+  },
+  {
+    q: 'AT Protocol vs ActivityPub: why did OpenXiv pick AT Proto?',
+    a: 'AT Protocol gives each user a portable signed-data PDS, account portability across providers, public-readable repositories, and a global jetstream for indexers. Together those let a preprint be both a personal record and a public artifact without dual-write. ActivityPub federates messages between servers but does not by itself give portable, signed, public-readable records of the kind a preprint registry needs. OpenXiv could bridge to ActivityPub later, but the source-of-truth records live on AT Proto.',
+  },
+  {
+    q: 'What licenses can I publish under on OpenXiv?',
+    a: 'Authors retain copyright and pick a license at submission. The default is CC-BY-4.0. CC-BY-SA, CC0, and a small set of permissive software-style licenses for software-heavy preprints are also accepted. Once a paper is published the license is part of its JSON-LD metadata (schema.org license field) and HighWire citation tags. We do not accept all-rights-reserved or paywalled licenses. OpenXiv is an open repository.',
+  },
+  {
+    q: 'How does OpenXiv handle retractions and corrections?',
+    a: 'OpenXiv does not delete papers, because deletion breaks citation graphs and looks like history-rewriting. Authors can retract a paper, which keeps the OpenXiv identifier resolving and shows a tombstone with the retraction reason. Corrections are published as new versions through the versions endpoint; the old version stays accessible with a "superseded" badge and the changelog explains what changed.',
+  },
+  {
+    q: 'Where do OpenXiv files actually live?',
+    a: 'AT-proto records (paper metadata, summaries, disclosure, endorsements) live in the author\'s PDS, on Bluesky\'s by default, or on a self-hosted one. Binary artifacts (PDFs, HTML conversions, figures) live on OpenXiv\'s S3-compatible object storage, currently MinIO on the same VPS that runs the App View. The App View indexes both layers and exposes them through a single public API.',
+  },
+  {
+    q: 'How do I cite a paper on OpenXiv?',
+    a: 'Every paper page exposes a Cite Panel with BibTeX, RIS, and APA / Chicago / MLA formats pre-filled. The canonical citation includes the author list, title, OpenXiv identifier, ISSN, and the date of latest version. HighWire and Dublin Core metadata are emitted on every paper page so Zotero, Mendeley, and Google Scholar pick the citation up automatically.',
+  },
+];
+
+const ld = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  publisher: { '@id': ORG_ID },
+  inLanguage: 'en',
+  mainEntity: faq.map((qa) => ({
+    '@type': 'Question',
+    name: qa.q,
+    acceptedAnswer: { '@type': 'Answer', text: qa.a },
+  })),
+};
+---
+<Base
+  title="FAQ — OpenXiv"
+  description="OpenXiv frequently asked questions: AT Protocol preprint server, AI disclosure, Trust Passport, ISSN 3120-9556, federation to Bluesky, independent researchers."
+>
+  <script slot="head" is:inline type="application/ld+json" set:html={safeJsonLd(ld)} />
+
+  <main class="container-narrow">
+    <Breadcrumbs items={[{ name: 'Home', url: '/' }, { name: 'FAQ', url: '/faq' }]} />
+    <h1 class="title-serif">Frequently asked questions</h1>
+    <p class="muted">
+      Eighteen common questions about OpenXiv, answered in full so each
+      answer can stand on its own. Last updated 2026-05-20.
+    </p>
+
+    <div class="faq-list">
+      {faq.map((qa) => (
+        <details class="card faq-item">
+          <summary><strong>{qa.q}</strong></summary>
+          <p class="body-serif">{qa.a}</p>
+        </details>
+      ))}
+    </div>
+
+    <p class="muted" style="margin-top: 28px;">
+      See also: <a href="/about">About</a>, <a href="/glossary">Glossary</a>,
+      <a href="/compare/arxiv">OpenXiv vs arXiv</a>,
+      <a href="/docs/how-to-submit">How to submit</a>,
+      <a href="/policies">Policies</a>.
+    </p>
+  </main>
+</Base>
+
+<style>
+  .faq-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 20px;
+  }
+  .faq-item {
+    padding: 14px 16px;
+  }
+  .faq-item summary {
+    cursor: pointer;
+    list-style: none;
+  }
+  .faq-item summary::-webkit-details-marker {
+    display: none;
+  }
+  .faq-item summary strong {
+    font-family: var(--font-serif);
+    font-size: 16px;
+  }
+  .faq-item p {
+    margin: 10px 0 0;
+    font-size: 14.5px;
+    line-height: 1.55;
+  }
+</style>

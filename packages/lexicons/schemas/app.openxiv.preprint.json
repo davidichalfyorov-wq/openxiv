@@ -1,0 +1,83 @@
+{
+  "lexicon": 1,
+  "id": "app.openxiv.preprint",
+  "description": "Compatibility alias for app.openxiv.paper. Holds the same OpenXiv preprint metadata under the collection name expected by early federation clients.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["title", "authors", "categories", "createdAt", "license"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 4
+          },
+          "authors": {
+            "type": "array",
+            "minLength": 1,
+            "maxLength": 200,
+            "items": { "type": "ref", "ref": "#authorRef" }
+          },
+          "categories": {
+            "type": "array",
+            "minLength": 1,
+            "maxLength": 6,
+            "items": { "type": "string", "maxLength": 64 }
+          },
+          "primaryCategory": { "type": "string", "maxLength": 64 },
+          "crossListings": {
+            "type": "array",
+            "maxLength": 5,
+            "items": { "type": "string", "maxLength": 64 }
+          },
+          "abstract": { "type": "string", "maxLength": 8000 },
+          "keywords": {
+            "type": "array",
+            "maxLength": 30,
+            "items": { "type": "string", "maxLength": 64 }
+          },
+          "license": {
+            "type": "string",
+            "knownValues": [
+              "CC-BY-4.0",
+              "CC-BY-SA-4.0",
+              "CC-BY-NC-4.0",
+              "CC-BY-NC-SA-4.0",
+              "CC-BY-ND-4.0",
+              "CC0-1.0",
+              "arXiv-nonexclusive-distrib",
+              "all-rights-reserved"
+            ]
+          },
+          "pdf": { "type": "blob", "accept": ["application/pdf"], "maxSize": 52428800 },
+          "source": {
+            "type": "blob",
+            "accept": ["application/gzip", "application/x-tar", "application/zip"],
+            "maxSize": 104857600
+          },
+          "html": { "type": "blob", "accept": ["text/html"], "maxSize": 20971520 },
+          "summaryUri": { "type": "string", "format": "at-uri" },
+          "disclosureUri": { "type": "string", "format": "at-uri" },
+          "supersedes": { "type": "string", "format": "at-uri" },
+          "versionNote": { "type": "string", "maxLength": 500 },
+          "doi": { "type": "string", "maxLength": 200 },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    },
+    "authorRef": {
+      "type": "object",
+      "required": ["displayName"],
+      "properties": {
+        "did": { "type": "string", "format": "did" },
+        "displayName": { "type": "string", "maxLength": 200 },
+        "orcid": { "type": "string", "maxLength": 19 },
+        "affiliation": { "type": "string", "maxLength": 200 },
+        "isCorresponding": { "type": "boolean", "default": false }
+      }
+    }
+  }
+}

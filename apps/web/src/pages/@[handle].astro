@@ -1,0 +1,14 @@
+---
+// /@{handle} → /u/{handle}. The `/u/` form is the canonical SEO surface
+// (ProfilePage JSON-LD + sameAs anchors live there). The `@`-prefix path
+// stays as a friendly readable alias.
+//
+// IMPORTANT: do NOT wrap `handle` in encodeURIComponent here. Astro has
+// already URL-decoded the segment from `Astro.params`, and encoding it
+// again would re-introduce the double-encode that 404'd ORCID/Google
+// profiles whose DIDs contained colons. The browser handles the on-wire
+// encoding when it follows the 301 redirect.
+const { handle } = Astro.params;
+if (!handle) return new Response('Missing handle', { status: 400 });
+return Astro.redirect(`/u/${handle}`, 301);
+---

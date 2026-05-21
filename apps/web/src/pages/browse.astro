@@ -1,0 +1,48 @@
+---
+import Base from '../layouts/Base.astro';
+import HomeBrowse from '../components/HomeBrowse.astro';
+import { serverClient } from '../lib/api';
+import { buildCategoryBrowse, type CategoryBrowse } from '@openxiv/shared';
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+let browse: CategoryBrowse = buildCategoryBrowse({});
+let error: string | null = null;
+
+try {
+  browse = await serverClient(cookie, Astro.request).categoryBrowse();
+} catch (err) {
+  error = (err as Error).message;
+}
+---
+
+<Base
+  title="Browse OpenXiv by subject"
+  description="Browse OpenXiv preprints by subject and category."
+>
+  <main class="container browse-page">
+    <h1 class="sr-only">Browse OpenXiv by subject</h1>
+    <HomeBrowse browse={browse} />
+
+    {error && (
+      <div class="card browse-error" role="status">
+        <strong>Browse data unavailable</strong>
+        <p class="muted">{error}</p>
+      </div>
+    )}
+  </main>
+  <style>
+    .browse-page :global(.home-browse) {
+      margin-top: 0;
+    }
+
+    .browse-error {
+      margin-top: 16px;
+      border-color: var(--tone-warning);
+    }
+
+    .browse-error p {
+      margin: 6px 0 0;
+    }
+  </style>
+</Base>
+

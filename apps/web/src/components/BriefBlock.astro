@@ -1,0 +1,95 @@
+---
+import type { BriefItem } from '../lib/brief';
+
+interface Props {
+  items: BriefItem[];
+}
+const { items } = Astro.props;
+
+const KIND_META: Record<BriefItem['kind'], { label: string; tone: string }> = {
+  featured: { label: 'Editor\'s pick', tone: 'accent' },
+  claim: { label: 'Fresh claim', tone: 'info' },
+  open_question: { label: 'Open question', tone: 'caution' },
+  explainer: { label: 'Explainer', tone: 'success' },
+  serendipity: { label: 'Serendipity', tone: 'warning' },
+};
+---
+<ol class="brief-list" aria-label="Daily science brief">
+  {items.map((item, i) => {
+    const meta = KIND_META[item.kind];
+    return (
+      <li class={`brief-item brief-item-${item.present ? 'on' : 'off'}`}>
+        <header class="brief-item-head">
+          <span class="brief-num">{i + 1}</span>
+          <span class={`brief-pill brief-pill-${meta.tone}`}>{meta.label}</span>
+        </header>
+        {item.present ? (
+          <>
+            {item.href ? (
+              <a href={item.href} class="brief-title">{item.title}</a>
+            ) : (
+              <span class="brief-title">{item.title}</span>
+            )}
+            {item.blurb && <p class="muted brief-blurb">{item.blurb}</p>}
+          </>
+        ) : (
+          <p class="muted brief-blurb">{item.blurb ?? '—'}</p>
+        )}
+      </li>
+    );
+  })}
+</ol>
+
+<p class="muted brief-finite">
+  That's all for today. We won't refresh on scroll — this is a finite read by design.
+</p>
+
+<style>
+  .brief-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+  .brief-item {
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-elev);
+  }
+  .brief-item-off { opacity: 0.6; }
+  .brief-item-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .brief-num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    padding: 1px 6px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+  .brief-pill {
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-radius: 999px;
+  }
+  .brief-pill-accent { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+  .brief-pill-info { background: color-mix(in srgb, var(--tone-info) 14%, transparent); color: var(--tone-info); }
+  .brief-pill-caution { background: color-mix(in srgb, var(--tone-caution) 14%, transparent); color: var(--tone-caution); }
+  .brief-pill-success { background: color-mix(in srgb, var(--tone-success) 14%, transparent); color: var(--tone-success); }
+  .brief-pill-warning { background: color-mix(in srgb, var(--tone-warning) 18%, transparent); color: var(--tone-warning); }
+
+  .brief-title {
+    display: block;
+    font-family: var(--font-serif);
+    font-size: 17px;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+  a.brief-title:hover { text-decoration: underline; }
+  .brief-blurb { margin: 6px 0 0; font-size: 14px; line-height: 1.55; }
+
+  .brief-finite {
+    margin-top: 24px;
+    text-align: center;
+    font-size: 13px;
+    font-style: italic;
+  }
+</style>

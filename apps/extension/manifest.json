@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "OpenXiv overlay",
+  "version": "0.1.0",
+  "description": "Overlay OpenXiv Trust Passport lane badges on arXiv.org abstract pages.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://arxiv.org/*",
+    "https://www.arxiv.org/*",
+    "http://localhost:4000/*"
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://arxiv.org/abs/*", "https://www.arxiv.org/abs/*"],
+      "js": ["content.js"],
+      "css": ["overlay.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "OpenXiv overlay"
+  },
+  "icons": {
+    "16": "icon-16.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  }
+}

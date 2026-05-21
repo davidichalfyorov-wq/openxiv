@@ -1,0 +1,435 @@
+---
+import { serverClient, type EngagementResponse, type PaperDetail } from '../lib/api';
+
+/**
+ * Hero-sized card that sits directly under the paper title block and gives
+ * the reader (a) a live PDF preview, (b) a primary "Download PDF" action,
+ * (c) a "Read inline" link into the SSR HTML reader, and (d) the four
+ * engagement counters (unique views / HTML opens / PDF downloads /
+ * endorsements).
+ *
+ * Server-side rendering only — the engagement read is best-effort and we
+ * fall back to zeros instead of failing the page, so a flaky stats backend
+ * never blocks a paper from loading.
+ *
+ * Mobile (`max-width: 768px`): the PDF embed collapses (mobile browsers
+ * don't reliably support `<embed type="application/pdf">`), and we surface
+ * a tall download-first layout. Native PDF apps then handle the artifact.
+ */
+
+interface Props {
+  paper: PaperDetail;
+  pdfUrl: string;
+  readerPath: string;
+  paperTargetUri: string;
+}
+
+const { paper, pdfUrl, readerPath, paperTargetUri } = Astro.props;
+
+// Build a clean download filename. openxivId comes wrapped as
+// "openxiv:cs.AI.2026.00117" — useful as a citation identifier but the
+// colon is filesystem-unfriendly on Windows and looks weird in browser
+// download bars. Strip the prefix so the saved file is just
+// "openxiv-cs.AI.2026.00117.pdf".
+const downloadSlug = (paper.openxivId ?? paper.id).replace(/^openxiv:/, '');
+const downloadFilename = `openxiv-${downloadSlug}.pdf`;
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+let engagement: EngagementResponse = {
+  endorsements: { count: 0, breakdown: {} },
+  citations: null,
+  reads: { views: 0, html_opens: 0, pdf_downloads: 0 },
+};
+try {
+  engagement = await serverClient(cookie, Astro.request).paperEngagement(paper.id);
+} catch (_err) {
+  // intentionally swallowed — analytics shouldn't gate a paper page.
+}
+
+function compactNumber(value: number): string {
+  if (!Number.isFinite(value) || value < 0) return '0';
+  return new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+}
+
+// "Unique views" maps to the back-end `views` counter, which is already
+// per-(session, paper) deduped via the analytics rollup — no extra math
+// required client-side.
+const stats: Array<{ key: string; value: number; label: string; helper?: string | null }> = [
+  { key: 'views', value: engagement.reads.views, label: 'Unique views' },
+  { key: 'html', value: engagement.reads.html_opens, label: 'HTML reads' },
+  { key: 'pdf', value: engagement.reads.pdf_downloads, label: 'PDF downloads' },
+  {
+    key: 'endorsements',
+    value: engagement.endorsements.count,
+    label: 'Endorsements',
+    helper:
+      engagement.citations !== null && engagement.citations > 0
+        ? `${compactNumber(engagement.citations)} citations on Crossref`
+        : null,
+  },
+];
+---
+
+<section
+  class="paper-pdf-card"
+  aria-label="PDF preview, download, and reader analytics"
+  data-paper-id={paper.id}
+>
+  <div class="paper-pdf-card-preview" aria-hidden="true">
+    {/*
+      <object> is the most-supported embed for PDF on desktop browsers.
+      We declare aria-hidden because the preview is purely visual — the
+      semantic content (title, abstract, body) already lives on the page.
+      Mobile fallback styling lives in `@media (max-width: 768px)`.
+    */}
+    <object
+      data={`${pdfUrl}#view=FitH&toolbar=0&navpanes=0`}
+      type="application/pdf"
+      class="paper-pdf-card-frame"
+    >
+      <div class="paper-pdf-card-fallback">
+        <strong>PDF preview is unavailable in this browser.</strong>
+        <p>Use the download button to open the file in your viewer.</p>
+      </div>
+    </object>
+  </div>
+
+  <div class="paper-pdf-card-side">
+    <div class="paper-pdf-card-actions">
+      <a
+        class="btn btn-primary paper-pdf-card-cta"
+        href={pdfUrl}
+        download={downloadFilename}
+        data-track-event="pdf_download"
+        data-track-target={paperTargetUri}
+      >
+        Download PDF
+      </a>
+      <button
+        type="button"
+        class="btn btn-ghost paper-pdf-card-cta paper-pdf-card-expand"
+        data-paper-pdf-expand
+        aria-haspopup="dialog"
+        aria-controls={`paper-pdf-fullscreen-${paper.id}`}
+        data-track-event="pdf_fullscreen"
+        data-track-target={paperTargetUri}
+      >
+        Open fullscreen
+      </button>
+      <a
+        class="btn btn-ghost paper-pdf-card-cta"
+        href={readerPath}
+        data-track-event="html_open"
+        data-track-target={paperTargetUri}
+      >
+        Read in browser
+      </a>
+    </div>
+
+    <dl class="paper-pdf-card-stats" aria-label="Reader analytics">
+      {stats.map((stat) => (
+        <div class="paper-pdf-card-stat" data-stat={stat.key}>
+          <dt class="paper-pdf-card-stat-label">{stat.label}</dt>
+          <dd class="paper-pdf-card-stat-value">{compactNumber(stat.value)}</dd>
+          {stat.helper && <dd class="paper-pdf-card-stat-helper">{stat.helper}</dd>}
+        </div>
+      ))}
+    </dl>
+  </div>
+
+  {/*
+    In-page fullscreen modal. We deliberately AVOID `target="_blank"` per
+    the author's brief — staying on the same tab keeps reader analytics
+    intact and lets the page collect the `pdf_fullscreen` event before
+    the user dives into the document. <dialog> is now broadly supported
+    (Chrome / Firefox / Safari 15.4+); the inline script below is a thin
+    polyfill-free open/close + object lazy-loader, with a manual
+    fallback that opens the PDF in-page as a regular link if the
+    browser refuses to show the dialog.
+  */}
+  <dialog
+    class="paper-pdf-fullscreen"
+    id={`paper-pdf-fullscreen-${paper.id}`}
+    aria-label="Full-page PDF viewer"
+    data-pdf-url={pdfUrl}
+  >
+    <form method="dialog" class="paper-pdf-fullscreen-topbar">
+      <span class="paper-pdf-fullscreen-title">{paper.title}</span>
+      <button class="paper-pdf-fullscreen-close" type="submit" aria-label="Close fullscreen viewer">
+        ×
+      </button>
+    </form>
+    <object
+      class="paper-pdf-fullscreen-frame"
+      title={`Full-page PDF viewer for ${paper.title}`}
+      data-src={pdfUrl}
+      type="application/pdf"
+    >
+      <div class="paper-pdf-card-fallback">
+        <strong>PDF fullscreen is unavailable in this browser.</strong>
+        <p><a href={pdfUrl}>Open the PDF in this tab.</a></p>
+      </div>
+    </object>
+  </dialog>
+</section>
+
+<script is:inline>
+  (function () {
+    var triggers = document.querySelectorAll('[data-paper-pdf-expand]');
+    if (!triggers.length) return;
+    triggers.forEach(function (trigger) {
+      if (trigger.dataset.openxivPdfExpandBound === '1') return;
+      trigger.dataset.openxivPdfExpandBound = '1';
+      var targetId = trigger.getAttribute('aria-controls');
+      if (!targetId) return;
+      trigger.addEventListener('click', function () {
+        var dialog = document.getElementById(targetId);
+        if (!dialog) return;
+        var frame = dialog.querySelector('object.paper-pdf-fullscreen-frame');
+        if (frame && !frame.getAttribute('data')) {
+          var src = frame.getAttribute('data-src');
+          if (src) frame.setAttribute('data', src + '#view=FitH');
+        }
+        if (typeof dialog.showModal === 'function') {
+          try {
+            dialog.showModal();
+            return;
+          } catch (_err) {
+            /* fall through to fallback */
+          }
+        }
+        // Fallback: dialog unsupported or showModal failed. Navigate to the
+        // PDF in the same tab — keeps the author's "no new tab" constraint.
+        var pdfUrl = dialog.getAttribute('data-pdf-url');
+        if (pdfUrl) window.location.href = pdfUrl;
+      });
+    });
+
+    document.addEventListener('click', function (event) {
+      var dialog = event.target;
+      if (
+        dialog &&
+        dialog instanceof HTMLDialogElement &&
+        dialog.classList.contains('paper-pdf-fullscreen') &&
+        dialog.open &&
+        event.target === dialog
+      ) {
+        dialog.close();
+      }
+    });
+  })();
+</script>
+
+<style is:global>
+  .paper-pdf-card {
+    display: grid;
+    grid-template-columns: minmax(280px, min(42vw, 402px)) minmax(320px, 488px);
+    gap: 12px;
+    justify-content: start;
+    align-items: stretch;
+    margin-top: 18px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    box-shadow: var(--shadow-sm);
+  }
+  .paper-pdf-card-preview {
+    position: relative;
+    min-width: 0;
+    /* 8.5:11 letter-ish aspect; uses contain so the object doesn't blow up
+       the card on browsers that miscompute intrinsic size. */
+    aspect-ratio: 8.5 / 11;
+    max-height: 520px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--bg-elev);
+  }
+  .paper-pdf-card-frame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+  .paper-pdf-card-fallback {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    height: 100%;
+    padding: 18px;
+    color: var(--text-secondary);
+  }
+  .paper-pdf-card-fallback p {
+    margin: 0;
+    font-size: 13px;
+  }
+  .paper-pdf-card-side {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+  .paper-pdf-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .paper-pdf-card-cta {
+    flex: 1 1 140px;
+    text-align: center;
+    padding: 11px 14px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .paper-pdf-card-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+  }
+  .paper-pdf-card-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-base);
+    min-width: 0;
+  }
+  .paper-pdf-card-stat-label {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .paper-pdf-card-stat-value {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: 22px;
+    line-height: 1.1;
+    color: var(--text-primary);
+  }
+  .paper-pdf-card-stat-helper {
+    margin: 0;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    line-height: 1.35;
+  }
+  @media (max-width: 900px) {
+    .paper-pdf-card {
+      grid-template-columns: 1fr;
+    }
+    .paper-pdf-card-preview {
+      max-height: 360px;
+    }
+  }
+  @media (max-width: 768px) {
+    .paper-pdf-card {
+      padding: 14px;
+      gap: 14px;
+    }
+    .paper-pdf-card-preview {
+      /* Mobile browsers either ignore <object> entirely or open a non-
+         interactive iframe shim. Hide the preview and lean on the big
+         download button below it. */
+      display: none;
+    }
+    .paper-pdf-card-actions {
+      flex-direction: column;
+    }
+    .paper-pdf-card-cta {
+      flex: 1 1 auto;
+      width: 100%;
+      padding: 13px 16px;
+      font-size: 15px;
+    }
+    .paper-pdf-card-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 420px) {
+    .paper-pdf-card-stat-value {
+      font-size: 19px;
+    }
+  }
+
+  /* Fullscreen PDF modal. <dialog> picks up backdrop styling via the
+     ::backdrop pseudo-element, so the dimmer doesn't fight z-index with
+     unrelated overlays. We constrain max-width/max-height instead of
+     using 100vw/vh — that way iOS Safari respects the safe-area inset. */
+  .paper-pdf-fullscreen {
+    width: min(100vw, 1280px);
+    max-width: 100vw;
+    height: min(100vh, 960px);
+    max-height: 100vh;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-elev);
+    color: var(--text-primary);
+    overflow: hidden;
+  }
+  .paper-pdf-fullscreen::backdrop {
+    background: rgba(0, 0, 0, 0.72);
+  }
+  .paper-pdf-fullscreen[open] {
+    display: flex;
+    flex-direction: column;
+  }
+  .paper-pdf-fullscreen-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+    margin: 0;
+  }
+  .paper-pdf-fullscreen-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-serif);
+    font-size: 15px;
+    color: var(--text-primary);
+  }
+  .paper-pdf-fullscreen-close {
+    flex: 0 0 auto;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .paper-pdf-fullscreen-frame {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    border: 0;
+  }
+  @media (max-width: 768px) {
+    .paper-pdf-fullscreen {
+      width: 100vw;
+      height: 100vh;
+      max-height: 100vh;
+      border-radius: 0;
+      border: 0;
+    }
+  }
+</style>

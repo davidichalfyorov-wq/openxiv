@@ -1,0 +1,352 @@
+---
+import Base from '../../layouts/Base.astro';
+import { serverClient, type ModerationQueueItem } from '../../lib/api';
+import { formatPaperStatus } from '../../lib/paper-status';
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+const me = await client.me().catch(() => null);
+if (!me?.authenticated) {
+  return Astro.redirect(`/auth/sign-in?return=${encodeURIComponent(Astro.url.pathname)}`, 302);
+}
+if (me.user?.role !== 'admin' && me.user?.role !== 'moderator') {
+  return new Response('Forbidden', { status: 403 });
+}
+
+let items: ModerationQueueItem[] = [];
+let error: string | null = null;
+try {
+  const data = await client.moderationQueue();
+  items = data.items;
+} catch (err) {
+  error = (err as Error).message;
+}
+---
+
+<Base title="Moderation dashboard - OpenXiv" description="OpenXiv moderation queue.">
+  <main class="container moderation-page">
+    <header class="moderation-head">
+      <div>
+        <p class="muted moderation-eyebrow">Moderation</p>
+        <h1 class="title-serif">Pending manuscripts</h1>
+      </div>
+      <span class="badge badge-tone-warning">{items.length} pending</span>
+    </header>
+
+    {
+      error && (
+        <div class="card moderation-error">
+          <strong>Queue unavailable.</strong>
+          <p class="muted">{error}</p>
+        </div>
+      )
+    }
+
+    {
+      !error && items.length === 0 && (
+        <section class="empty-state">
+          <h2 class="title-serif">Queue clear</h2>
+          <p class="muted">No manuscripts are waiting for review.</p>
+        </section>
+      )
+    }
+
+    {
+      items.length > 0 && (
+        <section class="moderation-list" aria-label="Pending manuscripts">
+          {items.map((paper) => (
+            <article class="card moderation-item" data-paper-id={paper.id}>
+              <div class="moderation-main">
+                <div class="paper-meta-line">
+                  <span class="badge badge-tone-accent">{paper.primaryCategory}</span>
+                  {(paper.crossListings ?? []).map((code) => (
+                    <span class="badge badge-tone-neutral">{code}</span>
+                  ))}
+                  <span class="muted">{paper.createdAt.slice(0, 10)}</span>
+                </div>
+                <h2 class="title-serif">{paper.title}</h2>
+                {paper.abstract && <p class="abstract">{paper.abstract}</p>}
+                <dl class="paper-facts">
+                  <dt>Submitter</dt>
+                  <dd>
+                    <code>{paper.submitterDid}</code>
+                  </dd>
+                  <dt>Version</dt>
+                  <dd>
+                    {paper.latestVersion
+                      ? `v${paper.latestVersion.versionNumber}`
+                      : 'pending compile'}
+                  </dd>
+                  <dt>Status</dt>
+                  <dd>{formatPaperStatus(paper.status)}</dd>
+                </dl>
+                <a class="btn btn-sm" href={`/abs/${paper.openxivId ?? paper.id}`}>
+                  Open manuscript
+                </a>
+              </div>
+
+              <div class="moderation-actions">
+                <form
+                  class="decision-form accept-form"
+                  data-decision="accept"
+                  data-action={`/api-proxy/admin/moderation/papers/${paper.id}/decision`}
+                >
+                  <button class="btn btn-primary" type="submit" disabled={!paper.latestVersion}>
+                    Accept
+                  </button>
+                </form>
+
+                <form
+                  class="decision-form decision-panel"
+                  data-decision="reject_conditionally"
+                  data-action={`/api-proxy/admin/moderation/papers/${paper.id}/decision`}
+                >
+                  <label>
+                    <span>Revision comments</span>
+                    <textarea
+                      name="moderatorNote"
+                      rows="5"
+                      required
+                      placeholder="Required changes before a new version can be accepted"
+                    />
+                  </label>
+                  <label>
+                    <span>Reason</span>
+                    <select name="reasonCategory">
+                      <option value="other">Other</option>
+                      <option value="scope">Scope</option>
+                      <option value="duplicate">Duplicate</option>
+                      <option value="legal">Legal</option>
+                      <option value="slop">Unverified output</option>
+                    </select>
+                  </label>
+                  <button class="btn" type="submit">
+                    Reject conditionally
+                  </button>
+                </form>
+
+                <form
+                  class="decision-form decision-panel"
+                  data-decision="reject"
+                  data-action={`/api-proxy/admin/moderation/papers/${paper.id}/decision`}
+                >
+                  <label>
+                    <span>Final rejection note</span>
+                    <textarea
+                      name="moderatorNote"
+                      rows="4"
+                      required
+                      placeholder="Reason for terminal refusal"
+                    />
+                  </label>
+                  <label>
+                    <span>Reason</span>
+                    <select name="reasonCategory">
+                      <option value="other">Other</option>
+                      <option value="scope">Scope</option>
+                      <option value="duplicate">Duplicate</option>
+                      <option value="legal">Legal</option>
+                      <option value="slop">Unverified output</option>
+                    </select>
+                  </label>
+                  <button class="btn btn-danger" type="submit">
+                    Reject
+                  </button>
+                </form>
+                <p class="decision-status muted" role="status" aria-live="polite" />
+              </div>
+            </article>
+          ))}
+        </section>
+      )
+    }
+  </main>
+</Base>
+
+<script is:inline>
+  document.querySelectorAll('.decision-form').forEach(function (form) {
+    form.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      var el = event.currentTarget;
+      var item = el.closest('.moderation-item');
+      var status = item ? item.querySelector('.decision-status') : null;
+      var button = el.querySelector('button[type="submit"]');
+      var decision = el.getAttribute('data-decision');
+      var body = { decision: el.getAttribute('data-decision') };
+      var note = el.querySelector('[name="moderatorNote"]');
+      var reason = el.querySelector('[name="reasonCategory"]');
+      if (note) body.moderatorNote = note.value;
+      if (reason) body.reasonCategory = reason.value;
+      if (status) status.textContent = 'Saving...';
+      if (button) button.disabled = true;
+      try {
+        var res = await fetch(el.getAttribute('data-action'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        if (status)
+          status.textContent =
+            decision === 'accept'
+              ? 'Accepted. Publishing pipeline resumed.'
+              : decision === 'reject'
+                ? 'Rejected.'
+                : 'Feedback saved.';
+        if (decision === 'accept' || decision === 'reject') {
+          if (item) item.remove();
+          var badge = document.querySelector('.moderation-head .badge');
+          var remaining = document.querySelectorAll('.moderation-item').length;
+          if (badge) badge.textContent = remaining + ' pending';
+          if (remaining === 0) window.location.reload();
+        } else if (button) {
+          button.disabled = false;
+        }
+      } catch (err) {
+        if (status)
+          status.textContent = String(err && err.message ? err.message : err).slice(0, 240);
+        if (button) button.disabled = false;
+      }
+    });
+  });
+</script>
+
+<style>
+  .moderation-page {
+    max-width: 1180px;
+  }
+  .moderation-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .moderation-eyebrow {
+    margin: 0 0 4px;
+    font-size: 13px;
+  }
+  .moderation-head h1 {
+    margin: 0;
+  }
+  .moderation-error {
+    border-color: var(--tone-caution);
+  }
+  .moderation-error p {
+    margin: 6px 0 0;
+  }
+  .empty-state {
+    border-top: 1px solid var(--border);
+    padding: 28px 0;
+  }
+  .empty-state h2 {
+    margin: 0 0 6px;
+    font-size: 22px;
+  }
+  .moderation-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .moderation-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
+    gap: 20px;
+    padding: 18px;
+  }
+  .paper-meta-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .moderation-main h2 {
+    margin: 10px 0 8px;
+    font-size: 22px;
+    line-height: 1.18;
+  }
+  .abstract {
+    color: var(--text-secondary);
+    line-height: 1.5;
+    max-height: 7.5em;
+    overflow: hidden;
+  }
+  .paper-facts {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 5px 12px;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+  .paper-facts dt {
+    color: var(--text-tertiary);
+  }
+  .paper-facts dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .paper-facts code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .moderation-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .decision-panel {
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .decision-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .decision-form textarea,
+  .decision-form select {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-base);
+    color: var(--text-primary);
+    padding: 9px 10px;
+    font: inherit;
+    font-size: 13px;
+  }
+  .decision-form textarea {
+    resize: vertical;
+    min-height: 84px;
+  }
+  .btn-danger {
+    border-color: var(--tone-caution);
+    color: color-mix(in srgb, var(--tone-caution) 72%, var(--text-primary));
+    background: color-mix(in srgb, var(--tone-caution) 16%, transparent);
+  }
+  .btn-danger:hover {
+    background: color-mix(in srgb, var(--tone-caution) 24%, transparent);
+  }
+  .decision-status {
+    min-height: 18px;
+    margin: 0;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 860px) {
+    .moderation-head {
+      align-items: start;
+      flex-direction: column;
+    }
+    .moderation-item {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

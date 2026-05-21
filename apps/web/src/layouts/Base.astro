@@ -1,0 +1,509 @@
+---
+import '../styles/global.css';
+import { serverClient } from '../lib/api';
+import { OPENXIV_ISSN, issnPortalUrl } from '@openxiv/shared';
+import CookieBanner from '../components/CookieBanner.astro';
+import TwitterPixel from '../components/TwitterPixel.astro';
+import { safeJsonLd, ORG_ID } from '../lib/jsonld';
+
+interface Props {
+  title?: string;
+  description?: string;
+  canonicalUrl?: string | false;
+}
+
+const {
+  title = 'OpenXiv — a preprint server that lives in your social feed',
+  // Kept under 160 chars for SEO snippet truncation. Priority chain:
+  // AT Proto → endorsements → explainers → independent researchers.
+  description = 'AT-Protocol preprint server. Typed endorsements. Three AI-generated explainer tiers per preprint — school, undergrad, expert — labelled and verifiable.',
+  canonicalUrl,
+} = Astro.props;
+
+const publicBase = 'https://openxiv.net';
+const ogImage = `${publicBase}/brand/og-default.svg`;
+const frauncesCssHref =
+  'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,700;1,9..144,400&display=swap';
+const canonicalHref =
+  canonicalUrl === false
+    ? null
+    : (canonicalUrl ?? new URL(Astro.url.pathname, publicBase).toString());
+
+// Global Organization JSON-LD. Emitted on every page with a stable @id so
+// Google can reconcile OpenXiv as a single entity across the site instead of
+// inferring a new Organization per URL. publisher references on per-page
+// graphs (WebSite, ScholarlyArticle, FAQPage, …) point back to ORG_ID
+// rather than redeclaring the org body.
+const orgLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  '@id': ORG_ID,
+  name: 'OpenXiv',
+  url: publicBase,
+  logo: `${publicBase}/brand/logo-full.svg`,
+  description:
+    'Preprint server built on AT Protocol. Preprints federate to Bluesky. Typed endorsements, Trust Passport, AI disclosure.',
+  sameAs: [
+    'https://bsky.app/profile/openxiv.bsky.social',
+    issnPortalUrl(),
+  ],
+  identifier: { '@type': 'PropertyValue', propertyID: 'ISSN', value: OPENXIV_ISSN },
+  founder: {
+    '@type': 'Person',
+    name: 'David Alfyorov',
+  },
+  foundingDate: '2026-05-18',
+  knowsLanguage: ['en', 'ru'],
+};
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+let me: Awaited<ReturnType<ReturnType<typeof serverClient>['me']>> | null = null;
+try {
+  me = await serverClient(cookie, Astro.request).me();
+} catch (_err) {
+  me = { authenticated: false };
+}
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=yes"
+    />
+    <meta name="description" content={description} />
+    {
+      /*
+      Permissive indexing directives for answer-engine surfaces (Google AI
+      Mode, Bing Generative). max-snippet:-1 lets the model quote the full
+      paragraph; max-image-preview:large unlocks figure thumbnails in
+      AI-mode cards; max-video-preview:-1 unlocks autoplay video previews
+      where the page exposes them. We override per-page only on routes
+      that need noindex (auth/profile/admin already set their own meta).
+    */
+    }
+    <meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1" />
+    <meta name="theme-color" content="#0e0e10" />
+    <title>{title}</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="/favicon.svg?v=2"
+      media="(prefers-color-scheme: light)"
+    />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="/favicon-dark.svg?v=2"
+      media="(prefers-color-scheme: dark)"
+    />
+    <link rel="alternate icon" type="image/svg+xml" href="/favicon.svg?v=2" />
+    <link rel="apple-touch-icon" href="/brand/logo-mark.svg" />
+    <link rel="manifest" href="/manifest.json" />
+    <link
+      rel="alternate"
+      type="application/atom+xml"
+      title="OpenXiv — latest papers"
+      href="/feed.atom"
+    />
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+    <link
+      rel="search"
+      type="application/opensearchdescription+xml"
+      title="OpenXiv"
+      href="/opensearch.xml"
+    />
+    <link rel="author" type="text/plain" href="/humans.txt" />
+    {canonicalHref && <link rel="canonical" href={canonicalHref} />}
+    {
+      /*
+      Global Organization JSON-LD. Stable @id ORG_ID means every page is a
+      separate-but-coherent mention of the same publisher entity — search
+      engines stop guessing whether per-page Organization blocks describe
+      the same site.
+    */
+    }
+    <script is:inline type="application/ld+json" set:html={safeJsonLd(orgLd)} />
+    {
+      /*
+      Open Graph / Twitter Card defaults. Per-page overrides drop their
+      own tags via the `head` slot — Astro de-duplicates by `property`
+      attribute, so a paper page emitting its own og:title beats the
+      default below.
+    */
+    }
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="OpenXiv" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:url" content={new URL(Astro.url.pathname, publicBase).toString()} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="preload"
+      as="style"
+      href={frauncesCssHref}
+      media="(max-width: 768px)"
+      onload="this.onload=null;this.rel='stylesheet'"
+    />
+    <link rel="stylesheet" href={frauncesCssHref} media="(min-width: 769px)" />
+    <noscript><link rel="stylesheet" href={frauncesCssHref} /></noscript>
+    <slot name="head" />
+    {
+      /*
+      Theme bootstrap. Runs synchronously before paint so the page does not
+      flash between themes. Reads the saved preference from localStorage; the
+      unsaved default is the dark reference theme.
+    */
+    }
+    <script is:inline>
+      (function () {
+        try {
+          var saved = localStorage.getItem('openxiv-theme');
+          if (saved === 'light' || saved === 'dark') {
+            document.documentElement.setAttribute('data-theme', saved);
+          }
+        } catch (_e) {}
+      })();
+    </script>
+    {
+      /*
+      Lightweight event tracker. Lives at window.openxivTrack(event, uri, type, ctx).
+      Generates a per-browser session id (stored in localStorage) lazily; reads
+      DNT, the consent cookie, and the opt-out cookie before each fire so
+      pre-consent and opted-out users incur no network noise.
+    */
+    }
+    <script is:inline>
+      (function () {
+        function optedOut() {
+          try {
+            if (navigator.doNotTrack === '1' || window.doNotTrack === '1') return true;
+            if (navigator.globalPrivacyControl === true) return true;
+            if (/(^|;\s*)openxiv_notrack=1/.test(document.cookie)) return true;
+          } catch (_e) {}
+          return false;
+        }
+        function analyticsGranted() {
+          try {
+            var m = /(?:^|;\s*)openxiv_consent=([^;]+)/.exec(document.cookie);
+            if (!m) return false;
+            var v = m[1] || '';
+            var pad = '==='.slice(0, (4 - (v.length % 4)) % 4);
+            var raw = atob(v.replace(/-/g, '+').replace(/_/g, '/') + pad);
+            var bytes = new Uint8Array(raw.length);
+            for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+            var obj = JSON.parse(new TextDecoder().decode(bytes));
+            return obj && obj.v === 1 && obj.a === 1;
+          } catch (_e) {
+            return false;
+          }
+        }
+        function sid() {
+          try {
+            var k = 'openxiv-track-sid';
+            var v = localStorage.getItem(k);
+            if (!v) {
+              v =
+                'sess-' +
+                Math.random().toString(36).slice(2, 10) +
+                Math.random().toString(36).slice(2, 10);
+              localStorage.setItem(k, v);
+            }
+            return v;
+          } catch (_e) {
+            return 'sess-fallback';
+          }
+        }
+        function referrerHost() {
+          try {
+            if (!document.referrer) return null;
+            return new URL(document.referrer).hostname;
+          } catch (_e) {
+            return null;
+          }
+        }
+        window.openxivTrack = function (eventType, targetUri, targetType, context) {
+          try {
+            if (optedOut() || !analyticsGranted()) return;
+            var ctx = context || {};
+            var host = referrerHost();
+            if (host && !ctx.referrerHost) ctx.referrerHost = host;
+            var body = JSON.stringify({
+              sessionId: sid(),
+              eventType: eventType,
+              targetUri: targetUri,
+              targetType: targetType || 'other',
+              context: ctx,
+            });
+            if (navigator.sendBeacon) {
+              navigator.sendBeacon(
+                '/api-proxy/events/track',
+                new Blob([body], { type: 'application/json' }),
+              );
+            } else {
+              fetch('/api-proxy/events/track', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: body,
+                keepalive: true,
+              }).catch(function () {});
+            }
+          } catch (_e) {}
+        };
+      })();
+    </script>
+    {
+      /*
+      Twitter Pixel — gated triply: PUBLIC_TWITTER_TRACKING_ENABLED flag,
+      consent.marketing cookie, and runtime DNT check inside the helper.
+      Mounted in <head> so uwt.js loads before initial paint when marketing
+      consent is granted.
+    */
+    }
+    <TwitterPixel />
+  </head>
+  <body>
+    <a href="#main" class="skip-link">Skip to content</a>
+    {
+      /* Cookie banner — server-renders only when consent cookie is absent;
+        DNT browsers auto-write reject and never see it. */
+    }
+    <CookieBanner />
+    <header class="header-bar">
+      <div class="header-inner">
+        <div class="row">
+          <a href="/" class="brand" aria-label="OpenXiv home">
+            <span class="brand-wordmark" aria-hidden="true"
+              ><span class="brand-wm-open">Open</span><span class="brand-wm-xiv">Xiv</span></span
+            >
+            <img
+              src="/brand/logo-full.svg?v=5"
+              alt=""
+              width="48"
+              height="40"
+              class="brand-mark"
+              aria-hidden="true"
+            />
+          </a>
+          <nav class="header-nav" aria-label="Primary">
+            <a href="/">Feed</a>
+            <a href="/#browse">Browse</a>
+            <a href="/search" title="Search (press /)">Search</a>
+            <a href="/submit">Submit</a>
+            <a href="/about">About</a>
+          </nav>
+          <form class="header-search-form" action="/search" method="get">
+            <div class="header-search-wrapper">
+              <input
+                type="search"
+                name="q"
+                id="header-search-q"
+                placeholder="Search papers..."
+                autocomplete="off"
+              />
+              <kbd class="header-search-kbd">/</kbd>
+            </div>
+          </form>
+        </div>
+        <div class="row">
+          <button
+            id="theme-toggle"
+            class="btn btn-ghost btn-sm"
+            type="button"
+            aria-label="Toggle colour theme"
+            title="Toggle colour theme"
+          >
+            <span aria-hidden="true" id="theme-toggle-icon">◐</span>
+            <span class="sr-only">Toggle colour theme</span>
+          </button>
+          {
+            me?.authenticated && me.user ? (
+              <>
+                {me.user.role === 'moderator' && (
+                  <span class="badge badge-tone-warning">moderator</span>
+                )}
+                {me.user.role === 'admin' && (
+                  <span class="badge badge-tone-info admin-chip" title="Admin (DB-promoted)">
+                    admin
+                  </span>
+                )}
+                {me.user.role === 'admin' && (
+                  <a href="/admin/stats" class="btn btn-ghost btn-sm" title="Admin dashboard">
+                    Dashboard
+                  </a>
+                )}
+                {(me.user.role === 'admin' || me.user.role === 'moderator') && (
+                  <a href="/admin/moderation" class="btn btn-ghost btn-sm" title="Moderation queue">
+                    Review
+                  </a>
+                )}
+                <a href="/me/submissions" class="btn btn-ghost btn-sm" title="Submitted Papers">
+                  Submissions
+                </a>
+                {/*
+                Profile link policy:
+                  • When the user has a handle, link to the pretty form `/@{handle}`.
+                  • When they don't, route to /auth/welcome so they pick one rather
+                    than rendering a DID-shaped URL that would re-introduce the
+                    `did%3A` percent-encoding bug.
+                  • A raw DID is NEVER emitted into the link — that was the source
+                    of the production triple-encode incident.
+              */}
+                {me.user.handle ? (
+                  <a href={`/@${me.user.handle}`}>{me.user.displayName}</a>
+                ) : (
+                  <>
+                    <a href="/auth/welcome">{me.user.displayName}</a>
+                    <span class="badge badge-tone-info" title="Pick a handle to claim your /@ URL">
+                      Pick handle
+                    </span>
+                  </>
+                )}
+                {/*
+                Settings entry point. Goes to /settings/identity (account linking,
+                key rotation); that page links across to /settings/profile via tab
+                nav. Kept as ghost-style so it doesn't compete visually with the
+                primary profile link.
+              */}
+                <a
+                  href="/settings/identity"
+                  class="btn btn-ghost btn-sm"
+                  title="Account & profile settings"
+                >
+                  Settings
+                </a>
+                <form method="post" action="/api-proxy/auth/logout">
+                  <button class="btn btn-sm" type="submit">
+                    Sign out
+                  </button>
+                </form>
+              </>
+            ) : (
+              <a href="/auth/sign-in" class="btn btn-sm">
+                Sign in / Sign up
+              </a>
+            )
+          }
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <slot />
+    </main>
+
+    <footer
+      style="border-top:1px solid var(--border); padding:24px 0; color: var(--text-tertiary); margin-top: 48px;"
+    >
+      <div
+        class="container"
+        style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;"
+      >
+        <span>
+          OpenXiv — preprint server on AT Protocol · open to independent researchers ·
+          <a
+            href={issnPortalUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+            style="color:inherit;"
+          >
+            ISSN {OPENXIV_ISSN}
+          </a>
+        </span>
+        <span class="row" style="gap: 12px;">
+          <a href="/about" style="color:inherit;">About</a>
+          <a href="/policies" style="color:inherit;">Policies</a>
+          <a href="/privacy" style="color:inherit;">Privacy</a>
+          <a href="/terms" style="color:inherit;">Terms</a>
+          <a href="/feed.atom" style="color:inherit;">RSS</a>
+          <a href="/oai-pmh?verb=Identify" style="color:inherit;">OAI-PMH</a>
+          <span>{new Date().getFullYear()}</span>
+        </span>
+      </div>
+    </footer>
+
+    {
+      /*
+      Global keyboard shortcuts. "/" focuses search (skipped if user is
+      already typing in an input); "g h" navigates home; "g s" navigates
+      to /search. Intentionally minimal — no Vim-style chord trees.
+    */
+    }
+    <script is:inline>
+      (function () {
+        var pendingG = 0;
+        function isTyping() {
+          var el = document.activeElement;
+          if (!el) return false;
+          var t = el.tagName;
+          return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || el.isContentEditable;
+        }
+        document.addEventListener('keydown', function (e) {
+          if (e.metaKey || e.ctrlKey || e.altKey) return;
+          if (e.key === '/' && !isTyping()) {
+            e.preventDefault();
+            var headerSearch = document.getElementById('header-search-q');
+            if (headerSearch) {
+              headerSearch.focus();
+              headerSearch.select();
+            } else {
+              window.location.href = '/search';
+            }
+            return;
+          }
+          if (e.key === 'g' && !isTyping()) {
+            pendingG = Date.now();
+            return;
+          }
+          if (pendingG && Date.now() - pendingG < 800 && !isTyping()) {
+            if (e.key === 'h') {
+              e.preventDefault();
+              window.location.href = '/';
+            }
+            if (e.key === 's') {
+              e.preventDefault();
+              window.location.href = '/search';
+            }
+            if (e.key === 'a') {
+              e.preventDefault();
+              window.location.href = '/about';
+            }
+            pendingG = 0;
+          }
+        });
+      })();
+    </script>
+    <script is:inline>
+      (function () {
+        var btn = document.getElementById('theme-toggle');
+        var icon = document.getElementById('theme-toggle-icon');
+        if (!btn || !icon) return;
+        function current() {
+          var attr = document.documentElement.getAttribute('data-theme');
+          if (attr) return attr;
+          return 'dark';
+        }
+        function setIcon(theme) {
+          icon.textContent = theme === 'light' ? '☀' : '☾';
+        }
+        setIcon(current());
+        btn.addEventListener('click', function () {
+          var next = current() === 'light' ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', next);
+          try {
+            localStorage.setItem('openxiv-theme', next);
+          } catch (_e) {}
+          setIcon(next);
+        });
+      })();
+    </script>
+  </body>
+</html>

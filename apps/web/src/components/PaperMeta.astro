@@ -1,0 +1,159 @@
+---
+import type { PaperDetail } from '../lib/api';
+import { OPENXIV_ISSN } from '@openxiv/shared';
+import { safeJsonLd, ORG_ID } from '../lib/jsonld';
+
+interface Props {
+  paper: PaperDetail;
+  /**
+   * When the figure-extractor has run for this paper, the first
+   * extracted figure makes a much better OG card than the generic
+   * cover. Optional; absent for papers the worker hasn't reached yet.
+   */
+  firstFigureUrl?: string | null;
+}
+
+const { paper, firstFigureUrl } = Astro.props;
+const configuredPublicBase = import.meta.env.PUBLIC_WEB_BASE ?? process.env.PUBLIC_WEB_BASE;
+const publicBase = (configuredPublicBase ?? Astro.url.origin).replace(/\/+$/, '');
+const ogImage = firstFigureUrl ?? `${publicBase}/brand/og-default.svg`;
+const paperUrl = paper.openxivUrlId
+  ? `${publicBase}/p/${paper.openxivUrlId}`
+  : `${publicBase}/paper/${paper.id}`;
+const absUrl = paperUrl;
+const paperLookupId = paper.openxivUrlId ?? paper.id;
+const stablePdfUrl = `${publicBase}/api/papers/${encodeURIComponent(paperLookupId)}/pdf`;
+const pdfUrl = paper.latestVersion?.pdfUrl ? stablePdfUrl : '';
+const htmlUrl = paper.latestVersion?.htmlUrl ?? '';
+
+// Google Scholar's Highwire meta convention is YYYY/MM/DD. Schema.org's
+// datePublished is ISO 8601 (YYYY-MM-DD). We compute both from the same
+// source so the two surfaces don't drift.
+const isoDate = (paper.publishedAt ?? paper.createdAt).slice(0, 10);
+const slashDate = isoDate.replace(/-/g, '/');
+const arxivIdLike = paper.openxivId ?? '';
+
+function scholarAuthorName(displayName: string): string {
+  const trimmed = displayName.trim().replace(/\s+/g, ' ');
+  if (!trimmed) return '';
+  if (trimmed.includes(',')) return trimmed;
+  const particles = new Set(['da', 'de', 'del', 'der', 'di', 'du', 'la', 'le', 'van', 'von']);
+  const parts = trimmed.split(' ');
+  if (parts.length < 2) return trimmed;
+  const lastParts = [parts.pop()!];
+  while (parts.length > 1 && particles.has(parts[parts.length - 1]!.toLowerCase())) {
+    lastParts.unshift(parts.pop()!);
+  }
+  return `${lastParts.join(' ')}, ${parts.join(' ')}`;
+}
+
+// Schema.org ScholarlyArticle: keep nullable fields out of the object so the
+// rendered JSON is valid (no "null" strings on optional properties).
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'ScholarlyArticle',
+  headline: paper.title,
+  name: paper.title,
+  identifier: paper.openxivId ?? paper.id,
+  url: absUrl,
+  ...(paper.abstract ? { abstract: paper.abstract } : {}),
+  ...(paper.keywords.length > 0 ? { keywords: paper.keywords.join(', ') } : {}),
+  datePublished: isoDate,
+  dateCreated: paper.createdAt.slice(0, 10),
+  inLanguage: 'en',
+  license: paper.license,
+  ...(paper.doi ? { sameAs: `https://doi.org/${paper.doi}` } : {}),
+  author: paper.authors.map((a) => {
+    // Cross-link authors to ORCID and Bluesky where we have identifiers.
+    // sameAs is an array so multiple identity surfaces can co-exist; ORCID
+    // is the canonical research identity for those who have one, the
+    // Bluesky handle URL is the canonical social identity on the AT-proto
+    // side. did:plc resolves natively at bsky.app/profile/{did}.
+    const sameAs: string[] = [];
+    if (a.orcid) sameAs.push(`https://orcid.org/${a.orcid}`);
+    if (a.did && a.did.startsWith('did:plc:')) {
+      sameAs.push(`https://bsky.app/profile/${a.did}`);
+    }
+    return {
+      '@type': 'Person',
+      name: a.displayName,
+      ...(a.affiliation ? { affiliation: { '@type': 'Organization', name: a.affiliation } } : {}),
+      ...(sameAs.length > 0 ? { sameAs } : {}),
+    };
+  }),
+  isPartOf: {
+    '@type': 'Periodical',
+    name: 'OpenXiv',
+    issn: OPENXIV_ISSN,
+    url: publicBase,
+  },
+  publisher: { '@id': ORG_ID },
+  ...(pdfUrl
+    ? {
+        encoding: {
+          '@type': 'MediaObject',
+          contentUrl: pdfUrl,
+          encodingFormat: 'application/pdf',
+        },
+      }
+    : {}),
+};
+---
+{/* HighWire Press citation meta — what Google Scholar parses. */}
+<meta name="citation_title" content={paper.title} />
+{paper.authors.map((a) => (
+  <meta name="citation_author" content={scholarAuthorName(a.displayName)} />
+))}
+{paper.authors.map((a) =>
+  a.affiliation ? <meta name="citation_author_institution" content={a.affiliation} /> : null,
+)}
+{paper.authors.map((a) =>
+  a.orcid ? <meta name="citation_author_orcid" content={a.orcid} /> : null,
+)}
+<meta name="citation_publication_date" content={slashDate} />
+<meta name="citation_online_date" content={slashDate} />
+<meta name="citation_journal_title" content="OpenXiv" />
+<meta name="citation_publisher" content="OpenXiv" />
+<meta name="citation_issn" content={OPENXIV_ISSN} />
+<meta name="citation_language" content="en" />
+<meta name="citation_technical_report_institution" content="OpenXiv" />
+{paper.abstract && <meta name="citation_abstract" content={paper.abstract} />}
+{paper.keywords.length > 0 && <meta name="citation_keywords" content={paper.keywords.join('; ')} />}
+{arxivIdLike && <meta name="citation_arxiv_id" content={arxivIdLike} />}
+{paper.doi && <meta name="citation_doi" content={paper.doi} />}
+{paper.latestVersion?.pdfUrl && <meta name="citation_pdf_url" content={stablePdfUrl} />}
+{paper.latestVersion?.htmlUrl && <meta name="citation_fulltext_html_url" content={paper.latestVersion.htmlUrl} />}
+<meta name="citation_abstract_html_url" content={absUrl} />
+{paper.license && <meta name="dcterms.rights" content={paper.license} />}
+<meta name="dc.title" content={paper.title} />
+{paper.authors.map((a) => (
+  <meta name="dc.creator" content={a.displayName} />
+))}
+<meta name="dc.date" content={isoDate} />
+<meta name="dc.identifier" content={paper.openxivId ?? paper.id} />
+<meta name="dc.identifier" content={absUrl} />
+{paper.doi && <meta name="dc.identifier" content={`doi:${paper.doi}`} />}
+<meta name="dc.identifier" content={`issn:${OPENXIV_ISSN}`} />
+{[paper.primaryCategory, ...(paper.crossListings ?? []), ...paper.keywords].map((subject) => (
+  <meta name="dc.subject" content={subject} />
+))}
+<link rel="canonical" href={absUrl} />
+
+{/* Open Graph / Twitter for shares. */}
+<meta property="og:type" content="article" />
+<meta property="og:title" content={paper.title} />
+{paper.abstract && <meta property="og:description" content={paper.abstract.slice(0, 240)} />}
+<meta property="og:url" content={absUrl} />
+<meta property="og:site_name" content="OpenXiv" />
+<meta property="og:image" content={ogImage} />
+{firstFigureUrl && <meta property="og:image:alt" content="Figure 1 from the paper" />}
+<meta name="twitter:card" content={firstFigureUrl ? 'summary_large_image' : 'summary'} />
+<meta name="twitter:title" content={paper.title} />
+{paper.abstract && <meta name="twitter:description" content={paper.abstract.slice(0, 200)} />}
+<meta name="twitter:image" content={ogImage} />
+
+{/* schema.org JSON-LD — escape so paper title can't break out of the script */}
+<script is:inline type="application/ld+json" set:html={safeJsonLd(jsonLd)} />
+
+{/* swallow unused imports (kept for future links) */}
+{htmlUrl ? '' : ''}

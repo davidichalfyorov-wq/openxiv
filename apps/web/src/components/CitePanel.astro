@@ -1,0 +1,92 @@
+---
+import type { PaperDetail } from '../lib/api';
+
+interface Props {
+  paper: PaperDetail;
+  absUrl: string;
+}
+
+const { paper, absUrl } = Astro.props;
+const year = (paper.publishedAt ?? paper.createdAt).slice(0, 4);
+const authorList = paper.authors.map((a) => a.displayName);
+const authorsBib = authorList.join(' and ');
+const authorsApa =
+  authorList.length === 1
+    ? authorList[0]
+    : authorList.length === 2
+      ? `${authorList[0]} & ${authorList[1]}`
+      : authorList.length > 0
+        ? `${authorList[0]} et al.`
+        : 'OpenXiv';
+
+const idKey = paper.openxivId ?? paper.id;
+const safeKey = idKey.replace(/[^a-zA-Z0-9]+/g, '_');
+
+const bibtex = [
+  `@article{openxiv:${safeKey},`,
+  `  title  = {${paper.title}},`,
+  `  author = {${authorsBib}},`,
+  `  year   = {${year}},`,
+  `  journal = {OpenXiv},`,
+  paper.doi ? `  doi    = {${paper.doi}},` : null,
+  `  url    = {${absUrl}},`,
+  paper.openxivId ? `  note   = {OpenXiv id: ${paper.openxivId}}` : null,
+  `}`,
+]
+  .filter(Boolean)
+  .join('\n');
+
+const apa = `${authorsApa} (${year}). ${paper.title}. OpenXiv${paper.openxivId ? ` ${paper.openxivId}` : ''}. ${absUrl}`;
+---
+<article class="card cite-panel" aria-labelledby="cite-heading">
+  <header class="row" style="justify-content: space-between; align-items: center; gap: 8px;">
+    <h2 id="cite-heading" style="margin:0; font-family: var(--font-serif); font-size: 16px;">Cite</h2>
+    <div class="row" style="gap:6px;">
+      <button class="btn btn-sm" type="button" data-cite="apa" data-target="cite-apa">Copy APA</button>
+      <button class="btn btn-sm" type="button" data-cite="bibtex" data-target="cite-bibtex">Copy BibTeX</button>
+    </div>
+  </header>
+  <pre id="cite-apa" class="cite-block" tabindex="0">{apa}</pre>
+  <pre id="cite-bibtex" class="cite-block" tabindex="0">{bibtex}</pre>
+</article>
+<style>
+  .cite-panel { padding: 14px 16px; }
+  .cite-block {
+    margin: 10px 0 0;
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
+  }
+</style>
+<script>
+  function flash(btn: HTMLButtonElement, msg: string) {
+    const orig = btn.textContent ?? '';
+    btn.textContent = msg;
+    btn.disabled = true;
+    setTimeout(() => {
+      btn.textContent = orig;
+      btn.disabled = false;
+    }, 1400);
+  }
+  document.querySelectorAll<HTMLButtonElement>('button[data-cite]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const targetId = btn.dataset.target;
+      if (!targetId) return;
+      const el = document.getElementById(targetId);
+      const text = el?.textContent ?? '';
+      try {
+        await navigator.clipboard.writeText(text);
+        flash(btn, 'Copied');
+      } catch {
+        flash(btn, 'Press ⌘C');
+      }
+    });
+  });
+</script>

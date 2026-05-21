@@ -1,0 +1,255 @@
+---
+import Base from '../layouts/Base.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import { OPENXIV_ISSN, issnPortalUrl } from '@openxiv/shared';
+import { safeJsonLd, ORG_ID } from '../lib/jsonld';
+
+// Page-level Organization mention is now emitted globally from Base.astro
+// with a stable @id. We keep an AboutPage graph here that surfaces the
+// FAQPage entries below so Google's FAQ rich result can attach to /about
+// directly. The questions are extracted verbatim from the <details>
+// blocks beneath so the structured data matches what readers see.
+const faqLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  publisher: { '@id': ORG_ID },
+  mainEntity: [
+    {
+      '@type': 'Question',
+      name: 'How is this different from arXiv?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text:
+          "arXiv is the trusted standard for several fields and we recommend cross-posting where you can. Two practical differences. First, endorsement: arXiv requires an existing arXiv author in your subfield to endorse you before you can post in some categories; OpenXiv has no endorsement gate. Second, AI policy: arXiv issues year-long author bans for unverified AI errors; OpenXiv refuses the specific paper with a named failure mode and lets you revise. Beyond that, the social side (typed endorsements, Bluesky federation, Trust Passport, eight-stage Provenance Timeline) is what this site is actually for.",
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Who generates the explainers?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text:
+          'The OpenXiv backend, via a Gemini / DeepSeek model — clearly disclosed as AI-generated in the UI. The original PDF is unchanged. If the explainer says something the original paper does not, the original wins.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Is this a journal? Does it peer review?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text:
+          `It is a preprint server, not a journal. We do not peer-review; appearing on OpenXiv does not mean the work is correct. What we do screen for is unverified or hallucinated output and submission-terms compliance. After publication, typed endorsements from other researchers function as lightweight post-publication review. The ISSN ${OPENXIV_ISSN} is the periodical identifier; registration is at ${issnPortalUrl()}.`,
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Can I delete or retract a paper?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text:
+          'You can retract; we keep the OpenXiv id resolving and show a tombstone with the retraction reason. We do not delete content outright because that breaks citation graphs and looks like history-rewriting.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Where does my data live?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text:
+          "AT-proto records live in your PDS (Bluesky's or your own). OpenXiv operates as an App View — we index what you publish but we do not own it. PDFs and HTML conversions live on our S3 (MinIO on the VPS). If you delete from your PDS, the App View notices on the next jetstream sync.",
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Who runs this?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text:
+          'Single operator, single instance — David Alfyorov, Vilnius, LT. The whole stack is described in /humans.txt. Open to collaboration; mail the address there.',
+      },
+    },
+  ],
+};
+---
+<Base
+  title="About — OpenXiv"
+  description="AT-Protocol preprint server. Typed endorsements, Trust Passport. Three AI-generated explainer tiers per preprint — school, undergrad, expert."
+>
+  <script slot="head" is:inline type="application/ld+json" set:html={safeJsonLd(faqLd)} />
+
+  <main class="container-narrow">
+    <Breadcrumbs items={[{ name: 'Home', url: '/' }, { name: 'About', url: '/about' }]} />
+    <img
+      src="/brand/logo-full.svg"
+      alt="OpenXiv"
+      width="640"
+      height="640"
+      class="brand-hero"
+      style="display:block; width:100%; max-width:420px; height:auto; margin:0 auto 20px;"
+    />
+    <h1 class="title-serif">A preprint server that lives in your social feed</h1>
+
+    <p class="body-serif">
+      OpenXiv is a small AT-Protocol-native preprint server. Papers, threads,
+      and explainers are real AT-proto records under the
+      <code>app.openxiv.*</code> namespace; they live in your PDS, federate to
+      Bluesky, and travel with you between clients. The point isn't a louder
+      front page — it's that publishing here drops your work into the same
+      stream where the people who read science actually spend their time.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 32px;">What you actually get</h2>
+    <ul class="body-serif" style="line-height: 1.55; padding-left: 22px;">
+      <li>
+        <strong>Federation to Bluesky.</strong> Every accepted preprint becomes
+        a Bluesky post with the abstract, an embed card, and a link back to the
+        full HTML and PDF. Followers see new work in their normal social feed,
+        not a separate notification silo.
+      </li>
+      <li>
+        <strong>Typed endorsements.</strong> Reviewers say what they actually
+        did: <em>verified derivation</em>, <em>reproduced result</em>,
+        <em>checked references</em>, <em>useful background</em>, <em>important
+        but flawed</em>, <em>needs correction</em>. A pile of generic "likes" is
+        easy to game; a single <em>verified derivation</em> from someone you
+        trust isn't.
+      </li>
+      <li>
+        <strong>Trust Passport as a signed evidence vector.</strong>
+        Every paper has separate lanes for transparency, identity,
+        provenance, citations, math, integrity, and social review. Readers
+        see green/yellow/red lane states with evidence items, open disputes,
+        author responses, and verified external attestations. It is a
+        longitudinal record, not a magic score.
+      </li>
+      <li>
+        <strong>Multi-tier summaries.</strong> Every paper has three audience
+        slices: <em>school</em> (curious teenager), <em>undergrad</em> (you've
+        seen the field), <em>expert</em> (you're in this subfield). Generated
+        once at submission, edited by the author, persisted with the paper.
+      </li>
+      <li>
+        <strong>Provenance Timeline.</strong> Eight publicly-visible stages
+        from upload through to Bluesky bridge, each with a timestamp where one
+        exists, so a reader can see how the paper got from manuscript to
+        indexed without guessing.
+      </li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 32px;">Who it's for</h2>
+    <p class="body-serif">
+      Independent researchers without institutional backing are welcome on the
+      same footing as everyone else. You sign in with ORCID (recommended for
+      researchers) or did:plc through Bluesky; we don't require an endorser,
+      we don't require an institutional email, we don't require an affiliation
+      at all. If the work is real and you describe it honestly, it gets
+      indexed.
+    </p>
+    <p class="body-serif">
+      This is deliberate. The endorsement-gating pattern keeps a lot of
+      well-meaning people out of the conversation for reasons that have
+      little to do with their work. The cost of that gate is paid by every
+      person whose field-shifting paper went unread because they hadn't yet
+      been adopted by an established lab. We'd rather pay a different cost.
+    </p>
+
+    <p class="body-serif">
+      You don't have to be in the field to read papers in the field. Each
+      preprint comes with three explainer tiers (school, undergrad, expert)
+      next to the original. AI generated and labelled as such. Read whichever
+      fits, then drop into the original when you're ready.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 32px;">AI use, honestly disclosed</h2>
+    <p class="body-serif">
+      AI use is fine. Hidden AI use isn't. Every submission tags itself
+      <em>none</em>, <em>assistant</em>, <em>co-author</em>, or
+      <em>primary</em> on a disclosure record that's part of the paper's
+      AT-proto blob. Readers can filter on it, the Trust Passport surfaces
+      it, and reviewers can call inconsistency.
+    </p>
+    <p class="body-serif">
+      Unverified or hallucinated output is a different problem from AI
+      use itself. It's work shaped like science but with hallucinated
+      references, fabricated math, or "as-an-AI-language-model"
+      boilerplate left in the body. We refuse it with a published
+      refusal packet that names the failure mode and points at the
+      evidence. Authors get to revise; we don't ban for a year. The
+      full policy is on the <a href="/terms">terms page</a>. Submission,
+      metadata, content, preservation, and takedown rules live in the
+      <a href="/policies">policies index</a>.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 32px;">FAQ</h2>
+
+    <details class="card" style="margin-bottom: 12px;">
+      <summary><strong>How is this different from arXiv?</strong></summary>
+      <p class="body-serif" style="margin-top: 12px;">
+        arXiv is the trusted standard for several fields and we recommend
+        cross-posting where you can. Two practical differences. First,
+        endorsement: arXiv requires an existing arXiv author in your
+        subfield to endorse you before you can post in some categories;
+        OpenXiv has no endorsement gate. Second, AI policy: arXiv issues
+        year-long author bans for unverified AI errors; OpenXiv refuses the
+        specific paper with a named failure mode and lets you revise. Beyond
+        that, the social side (typed endorsements, Bluesky federation, Trust
+        Passport, eight-stage Provenance Timeline) is what this site is
+        actually for.
+      </p>
+    </details>
+
+    <details class="card" style="margin-bottom: 12px;">
+      <summary><strong>Who generates the explainers?</strong></summary>
+      <p class="body-serif" style="margin-top: 12px;">
+        The OpenXiv backend, via a Gemini / DeepSeek model — clearly
+        disclosed as AI-generated in the UI. The original PDF is
+        unchanged. If the explainer says something the original paper
+        doesn't, the original wins.
+      </p>
+    </details>
+
+    <details class="card" style="margin-bottom: 12px;">
+      <summary><strong>Is this a journal? Does it peer review?</strong></summary>
+      <p class="body-serif" style="margin-top: 12px;">
+        It's a preprint server, not a journal. We do not peer-review;
+        appearing on OpenXiv does not mean the work is correct. What we
+        do screen for is unverified or hallucinated output (see above)
+        and submission-terms compliance.
+        After publication, typed endorsements from other researchers function
+        as lightweight post-publication review. The ISSN
+        ({OPENXIV_ISSN}) is the periodical identifier;
+        registration is at <a href={issnPortalUrl()} target="_blank" rel="noopener noreferrer">portal.issn.org</a>.
+      </p>
+    </details>
+
+    <details class="card" style="margin-bottom: 12px;">
+      <summary><strong>Can I delete or retract a paper?</strong></summary>
+      <p class="body-serif" style="margin-top: 12px;">
+        You can retract; we keep the OpenXiv id resolving and show a
+        tombstone with the retraction reason. We don't delete content
+        outright because that breaks citation graphs and looks
+        like history-rewriting.
+      </p>
+    </details>
+
+    <details class="card" style="margin-bottom: 12px;">
+      <summary><strong>Where does my data live?</strong></summary>
+      <p class="body-serif" style="margin-top: 12px;">
+        AT-proto records live in your PDS (Bluesky's or your own). OpenXiv
+        operates as an App View — we index what you publish but we don't
+        own it. PDFs and HTML conversions live on our S3 (MinIO on the
+        VPS). If you delete from your PDS, the App View notices on the
+        next jetstream sync.
+      </p>
+    </details>
+
+    <details class="card" style="margin-bottom: 24px;">
+      <summary><strong>Who runs this?</strong></summary>
+      <p class="body-serif" style="margin-top: 12px;">
+        Single operator, single instance — David Alfyorov, Vilnius, LT. The
+        whole stack is described in <a href="/humans.txt">humans.txt</a>.
+        Open to collaboration; mail the address there.
+      </p>
+    </details>
+  </main>
+</Base>

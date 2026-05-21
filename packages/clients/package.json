@@ -1,0 +1,45 @@
+{
+  "name": "@openxiv/clients",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./factory": {
+      "import": "./dist/factory.js",
+      "types": "./dist/factory.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@atproto/api": "^0.19.18",
+    "@atproto/jwk-jose": "^0.1.11",
+    "@atproto/oauth-client-node": "^0.3.17",
+    "@aws-sdk/client-s3": "^3.717.0",
+    "@aws-sdk/s3-request-presigner": "^3.717.0",
+    "@openxiv/shared": "workspace:*",
+    "@smithy/node-http-handler": "4.7.3",
+    "ioredis": "^5.4.2",
+    "opossum": "^8.4.0"
+  },
+  "devDependencies": {
+    "@types/opossum": "^8.1.8",
+    "fast-check": "^3.23.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "license": "AGPL-3.0-or-later"
+}

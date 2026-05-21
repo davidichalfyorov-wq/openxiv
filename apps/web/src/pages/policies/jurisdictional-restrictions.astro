@@ -1,0 +1,87 @@
+---
+import Base from '../../layouts/Base.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+---
+<Base
+  title="Jurisdictional restrictions — OpenXiv"
+  description="When and how OpenXiv geo-restricts content in response to binding legal demands. Reactive, documented, reversible."
+>
+  <main class="container-narrow">
+    <Breadcrumbs items={[{ name: 'Home', url: '/' }, { name: 'Policies', url: '/policies' }, { name: 'Jurisdictional restrictions', url: '/policies/jurisdictional-restrictions' }]} />
+    <h1 class="title-serif">Jurisdictional restrictions</h1>
+    <p class="muted">Last updated 2026-05-19. Plain English.</p>
+
+    <p class="body-serif">
+      OpenXiv is hosted on EU infrastructure and operates under EU
+      law (GDPR for personal data, CC-BY-4.0 default licensing for
+      content, academic freedom for editorial scope). We do not
+      pre-filter submissions based on political or social topic;
+      see the <a href="/policies/submission">submission policy</a>
+      for what we do filter on (methodology and academic scope).
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">When we may restrict</h2>
+    <p class="body-serif">
+      If a national authority issues a binding legal demand
+      requiring us to restrict access to a specific item for
+      viewers in that jurisdiction, we may implement a geographic
+      restriction for that item in that jurisdiction only.
+    </p>
+    <p class="body-serif">
+      We do not restrict content at the request of private
+      parties, governments outside the affected jurisdiction, or
+      in anticipation of demands that have not been made. We do
+      not delete content; we restrict access.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">How a restriction works</h2>
+    <ul class="body-serif">
+      <li>The restriction applies only to viewers identified as
+        connecting from the affected jurisdiction. The item
+        remains fully accessible from every other location.</li>
+      <li>We do not detect or block circumvention (VPNs,
+        anonymisers, mirrors). That is the affected jurisdiction's
+        enforcement problem, not ours.</li>
+      <li>The author is notified by email with the specific legal
+        demand cited.</li>
+      <li>The restriction is logged on the public
+        <a href="/transparency">transparency report</a> with the
+        item id, the jurisdiction, the date, and a citation of the
+        legal demand.</li>
+      <li>The restriction is reversible. If the underlying legal
+        situation changes, we lift the restriction and record the
+        reversal on the transparency report.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">What stays untouched</h2>
+    <ul class="body-serif">
+      <li>The author retains all rights to the work and may
+        publish it on any other platform.</li>
+      <li>The DOI continues to resolve. Citation, indexing, and
+        metadata harvesting are unaffected.</li>
+      <li>The full content remains in our archive and may be
+        accessed by anyone outside the restricted jurisdiction or
+        through standard academic interlibrary channels.</li>
+      <li>We never silently rewrite, redact, or modify the work.
+        Restrictions are about access, not content.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Standards we benchmark against</h2>
+    <p class="body-serif">
+      The reactive-geo-restriction-with-transparency model is the
+      standard practice of academic publishers, journalistic
+      outlets (BBC, NYT, Reuters), and global knowledge platforms
+      (Wikimedia). We adopt it because it satisfies legal
+      obligations without compromising academic integrity, and
+      because it keeps the moderation question separate from the
+      editorial question.
+    </p>
+
+    <p class="muted" style="margin-top: 24px;">
+      Related: <a href="/transparency">Transparency report</a> ·
+      <a href="/policies/submission">Submission policy</a> ·
+      <a href="/policies/items">Content policy</a> ·
+      <a href="/policies">All policies</a>.
+    </p>
+  </main>
+</Base>

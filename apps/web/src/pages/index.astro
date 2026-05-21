@@ -1,0 +1,271 @@
+---
+import Base from '../layouts/Base.astro';
+import FeaturedBlock from '../components/FeaturedBlock.astro';
+import HomeBrowse from '../components/HomeBrowse.astro';
+import { serverClient, type PaperSummary } from '../lib/api';
+import { loadRecentPreprints } from '../lib/recent-preprints';
+import { buildCategoryBrowse, type CategoryBrowse } from '@openxiv/shared';
+import { safeJsonLd, ORG_ID } from '../lib/jsonld';
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+let browse: CategoryBrowse = buildCategoryBrowse({});
+let error: string | null = null;
+let recentPapers: PaperSummary[] = [];
+
+try {
+  const client = serverClient(cookie, Astro.request);
+  const [papers, categoryBrowse] = await Promise.all([
+    loadRecentPreprints(client),
+    client.categoryBrowse().catch(() => buildCategoryBrowse({})),
+  ]);
+  browse = categoryBrowse;
+  recentPapers = papers;
+} catch (err) {
+  error = (err as Error).message;
+}
+
+const publicBase = 'https://openxiv.net';
+// WebSite + SearchAction JSON-LD gives Google a Sitelinks search box on
+// the homepage SERP card. The query template hits /search?q={query}
+// which is the existing Astro page. publisher is the same Organization
+// node emitted globally from Base.astro — referenced by @id so Google
+// sees one entity instead of a per-page clone.
+const websiteLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'OpenXiv',
+  alternateName: 'OpenXiv preprint server',
+  url: publicBase,
+  publisher: { '@id': ORG_ID },
+  inLanguage: 'en',
+  potentialAction: {
+    '@type': 'SearchAction',
+    target: {
+      '@type': 'EntryPoint',
+      urlTemplate: `${publicBase}/search?q={search_term_string}`,
+    },
+    'query-input': 'required name=search_term_string',
+  },
+};
+---
+<Base
+  title="OpenXiv - a preprint server that lives in your social feed"
+  description="AT-Protocol preprint server. Typed endorsements, Trust Passport, and three labelled explainer tiers per preprint."
+>
+  <script slot="head" is:inline type="application/ld+json" set:html={safeJsonLd(websiteLd)} />
+  <main class="container">
+    <section class="home-hero-container">
+      <div class="home-hero-left">
+        <h1 class="title-serif home-hero-title">
+          OpenXiv is a preprint server that lives in your social feed.
+        </h1>
+
+        <div class="home-reference-copy">
+          <p class="home-reference-paragraph strong">
+            Built on the AT Protocol. Preprints federate to Bluesky. Endorsements are typed verbs
+            (verified derivation, reproduced result, checked references) rather than generic likes.
+            Every paper carries a Trust Passport with four lanes: transparency, identity, integrity,
+            social review.
+          </p>
+          <p class="home-reference-paragraph muted-copy">
+            Open to independent researchers without institutional backing. Sign in with ORCID or
+            did:plc, with no endorsement gating and no affiliation filter.
+          </p>
+          <p class="home-reference-paragraph strong">
+            You don't have to be in the field to read papers in the field. Each preprint comes with
+            three explainer tiers (school, undergrad, expert) next to the original. Human-written or
+            AI generated and labelled as such. Read whichever fits, then drop into the original when
+            you're ready.
+          </p>
+          <p class="home-reference-paragraph muted-copy">
+            AI-assisted work is welcome under clear standards: disclose the involvement level, name
+            the models, verify every citation and number, never list AI as an author. The full
+            <a href="/code-of-conduct">code of conduct</a> applies. Unverified or hallucinated
+            output is refused with a public refusal packet naming the failure mode. We return work
+            for revision instead of banning authors.
+          </p>
+        </div>
+
+        <div class="row home-hero-cta">
+          <a href="/submit" class="btn btn-primary btn-hero-primary">Submit a paper</a>
+          <a href="#browse" class="btn btn-ghost btn-hero-ghost">Browse subjects</a>
+          <a href="/about" class="btn btn-ghost btn-hero-ghost">How it works</a>
+        </div>
+      </div>
+    </section>
+
+    <FeaturedBlock />
+
+    <section class="recent-preprints-widget recent-preprints-shelf" aria-labelledby="recent-preprints-heading">
+      <h2 id="recent-preprints-heading" class="widget-title">Recent Preprints</h2>
+      {recentPapers.length === 0 ? (
+        <p class="widget-empty muted">No recent preprints found.</p>
+      ) : (
+        <div class="widget-list">
+          {recentPapers.map((paper) => {
+            const href = paper.openxivUrlId ? `/abs/${paper.openxivUrlId}` : `/paper/${paper.id}`;
+            const authorLine = paper.authorLine ??
+              (paper.authorNames && paper.authorNames.length > 0
+                ? paper.authorNames.slice(0, 2).join(', ') + (paper.authorNames.length > 2 ? ' et al.' : '')
+                : 'OpenXiv author');
+            return (
+              <div class="widget-item">
+                <span class="widget-item-category">{paper.primaryCategory}</span>
+                <a href={href} class="widget-item-title">{paper.title}</a>
+                <span class="widget-item-author">by {authorLine}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+
+    <HomeBrowse browse={browse} compact />
+
+    {error && (
+      <div class="card" style="border-color: var(--tone-caution);">
+        <strong>Feed error</strong>
+        <p class="muted" style="margin: 6px 0 0;">{error}</p>
+      </div>
+    )}
+
+  </main>
+  <style>
+    .home-hero-container {
+      padding: 18px 0 30px;
+    }
+    .home-hero-left {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      min-width: 0;
+      max-width: 820px;
+    }
+    .home-hero-title {
+      max-width: 820px;
+      font-size: 44px;
+      line-height: 1.08;
+      margin: 0;
+      font-weight: 700;
+    }
+    .home-hero-cta {
+      margin: 0;
+      gap: 14px;
+    }
+    .btn-hero-primary {
+      padding: 10px 22px;
+      font-size: 15px;
+      font-weight: 500;
+    }
+    .btn-hero-ghost {
+      padding: 10px 22px;
+      font-size: 15px;
+    }
+    .home-reference-copy {
+      max-width: 800px;
+      margin: 0;
+      padding: 0;
+      font-family: var(--font-serif);
+    }
+    .home-reference-paragraph {
+      margin: 0;
+      max-width: 78ch;
+      overflow-wrap: anywhere;
+    }
+    .home-reference-paragraph + .home-reference-paragraph {
+      margin-top: 18px;
+    }
+    .home-reference-paragraph.strong {
+      color: var(--text-primary);
+      font-size: 16px;
+      line-height: 1.55;
+      font-weight: 700;
+    }
+    .home-reference-paragraph.muted-copy {
+      color: var(--text-tertiary);
+      font-size: 14px;
+      line-height: 1.62;
+    }
+    
+    /* Recent Preprints Widget */
+    .recent-preprints-widget {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+    .recent-preprints-shelf {
+      margin: 18px 0 24px;
+    }
+    .widget-title {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+    }
+    .widget-empty {
+      margin: 0;
+      font-size: 13px;
+    }
+    .widget-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 14px;
+    }
+    .widget-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .widget-item-category {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .widget-item-title {
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.4;
+      color: var(--text-primary);
+      text-decoration: none;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      transition: color 120ms ease;
+    }
+    .widget-item-title:hover {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .widget-item-author {
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+    
+    @media (max-width: 820px) {
+      .home-hero-container {
+        padding: 16px 0 32px;
+      }
+      .home-hero-title {
+        font-size: 36px;
+      }
+      .home-reference-paragraph.strong {
+        font-size: 15px;
+      }
+      .widget-list {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</Base>

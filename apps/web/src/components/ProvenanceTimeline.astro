@@ -1,0 +1,121 @@
+---
+import type { PaperDetail } from '../lib/api';
+
+interface Props {
+  provenance: NonNullable<PaperDetail['provenance']>;
+}
+const { provenance } = Astro.props;
+
+function relativeDate(iso: string | null): string {
+  if (!iso) return '';
+  const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms)) return '';
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return 'just now';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  const mo = Math.floor(day / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.floor(day / 365)}y ago`;
+}
+
+const pct = Math.round(provenance.completion * 100);
+---
+<article class="card prov-card" aria-labelledby="prov-heading">
+  <header class="prov-head">
+    <h2 id="prov-heading">Provenance</h2>
+    <span class="muted prov-pct" aria-label={`${pct} percent of pipeline stages complete`}>
+      {pct}% pipeline
+    </span>
+  </header>
+  <ol class="prov-list">
+    {provenance.stages.map((stage) => (
+      <li class={`prov-item ${stage.done ? 'prov-done' : 'prov-pending'}`}>
+        <span class="prov-marker" aria-hidden="true">
+          {stage.done ? (
+            <svg viewBox="0 0 16 16" width="14" height="14"><path d="M3 8l3.2 3.2L13 4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          ) : (
+            <svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          )}
+        </span>
+        <div class="prov-body">
+          <div class="prov-label">{stage.label}</div>
+          {stage.done && stage.completedAt && (
+            <time class="muted prov-time" datetime={stage.completedAt} title={stage.completedAt}>
+              {relativeDate(stage.completedAt)}
+            </time>
+          )}
+          {stage.done && !stage.completedAt && (
+            <span class="muted prov-time">done</span>
+          )}
+          {!stage.done && <span class="muted prov-time">pending</span>}
+        </div>
+      </li>
+    ))}
+  </ol>
+</article>
+
+<style>
+  .prov-card { padding: 14px 16px; }
+  .prov-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+  .prov-head h2 { margin: 0; font-family: var(--font-serif); font-size: 16px; }
+  .prov-pct { font-size: 12px; }
+  .prov-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: relative;
+  }
+  /* vertical guide line connecting markers — subtle, doesn't dominate */
+  .prov-list::before {
+    content: '';
+    position: absolute;
+    left: 9px;
+    top: 6px;
+    bottom: 6px;
+    width: 1px;
+    background: var(--border);
+  }
+  .prov-item {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+    position: relative;
+  }
+  .prov-marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    box-sizing: border-box;
+    z-index: 1;
+  }
+  .prov-done .prov-marker {
+    background: color-mix(in srgb, var(--tone-success) 18%, var(--bg-elev));
+    border-color: color-mix(in srgb, var(--tone-success) 60%, var(--border));
+    color: var(--tone-success);
+  }
+  .prov-pending .prov-marker { color: var(--text-secondary); }
+  .prov-body {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .prov-label { font-size: 14px; }
+  .prov-pending .prov-label { color: var(--text-secondary); }
+  .prov-time { font-size: 12px; }
+</style>

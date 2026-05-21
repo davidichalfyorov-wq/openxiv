@@ -1,0 +1,103 @@
+# Node
+node_modules/
+.pnpm-store/
+*.tsbuildinfo
+.turbo/
+.astro/
+.next/
+.cache/
+
+# Builds
+dist/
+build/
+out/
+
+# Tests / coverage
+coverage/
+playwright-report/
+test-results/
+.vitest/
+
+# Env
+.env
+.env.*
+.env.local
+.env.*.local
+.orcid-sandbox-link-*.b64
+!.env.example
+!.env.local.example
+!.env.*.example
+
+# Keys & secrets (NEVER commit)
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.key.pub
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+*.gpg
+*.asc
+secrets/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local data volumes
+pgdata/
+miniodata/
+redisdata/
+grobid-tmp/
+tectonic-tmp/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local release prep artifacts
+.claude/
+output/
+.playwright-mcp/
+/test submissions/
+.openxiv-*.tgz
+.openxiv-*.tar
+.openxiv-*.txt
+openxiv-*.tar
+openxiv-*.tgz
+openxiv-*.log
+openxiv-secrets.md
+*.docx
+/*.pdf
+/reference.png
+/openxiv-*.png
+/goal_*.md
+/oxiv-test-main.tex
+_legacy/
+
+# Legacy Python artifacts (under _legacy/)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Drizzle
+drizzle/meta/_journal.json.bak
+
+# Models (large)
+models/

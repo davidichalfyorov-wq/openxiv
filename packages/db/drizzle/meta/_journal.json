@@ -1,0 +1,244 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1737108000000,
+      "tag": "0000_init",
+      "breakpoints": false
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1737194400000,
+      "tag": "0001_arxiv_ids",
+      "breakpoints": false
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1737280800000,
+      "tag": "0002_drop_ops",
+      "breakpoints": false
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1737367200000,
+      "tag": "0003_stats_view",
+      "breakpoints": false
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1737453600000,
+      "tag": "0004_preregistrations",
+      "breakpoints": false
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1737540000000,
+      "tag": "0005_paper_sections",
+      "breakpoints": false
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1737626400000,
+      "tag": "0006_doi_unique",
+      "breakpoints": false
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1737712800000,
+      "tag": "0007_submission_terms",
+      "breakpoints": false
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1737799200000,
+      "tag": "0008_endorsement_verb",
+      "breakpoints": false
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1737885600000,
+      "tag": "0009_version_changelog",
+      "breakpoints": false
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1737972000000,
+      "tag": "0010_seminar_thread",
+      "breakpoints": false
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1738058400000,
+      "tag": "0011_refusal_packets",
+      "breakpoints": false
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1738144800000,
+      "tag": "0012_launch_kit",
+      "breakpoints": false
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1738231200000,
+      "tag": "0013_feed_events",
+      "breakpoints": false
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1738317600000,
+      "tag": "0014_external_papers",
+      "breakpoints": false
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1738404000000,
+      "tag": "0015_featured_items",
+      "breakpoints": false
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1738490400000,
+      "tag": "0016_daily_briefs",
+      "breakpoints": false
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1738576800000,
+      "tag": "0017_profile_modes",
+      "breakpoints": false
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1738663200000,
+      "tag": "0018_profile_cards",
+      "breakpoints": false
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1738749600000,
+      "tag": "0019_bsky_bridge",
+      "breakpoints": false
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1738836000000,
+      "tag": "0020_real_dids",
+      "breakpoints": false
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1738922400000,
+      "tag": "0021_multi_category",
+      "breakpoints": false
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1739008800000,
+      "tag": "0022_paper_edits",
+      "breakpoints": false
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1739095200000,
+      "tag": "0023_paper_labels_credit_artifacts",
+      "breakpoints": false
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1739181600000,
+      "tag": "0024_did_keys",
+      "breakpoints": false
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1739268000000,
+      "tag": "0025_did_canonicalize",
+      "breakpoints": false
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1739354400000,
+      "tag": "0026_final_pdf_and_analytics",
+      "breakpoints": false
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1739440800000,
+      "tag": "0027_paper_figures",
+      "breakpoints": false
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1739527200000,
+      "tag": "0028_owner_admin",
+      "breakpoints": false
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1739613600000,
+      "tag": "0029_account_links_backfill",
+      "breakpoints": false
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1739700000000,
+      "tag": "0030_product_analytics",
+      "breakpoints": false
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1739786400000,
+      "tag": "0031_citations_orcid_mastodon",
+      "breakpoints": false
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1739872800000,
+      "tag": "0032_account_links_mastodon_check",
+      "breakpoints": false
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1740045600000,
+      "tag": "0034_paper_figure_extractions",
+      "breakpoints": false
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+---
+import { serverClient } from '../../../lib/api';
+
+const { handle } = Astro.params;
+if (!handle) {
+  return new Response('Missing handle', { status: 400 });
+}
+const client = serverClient(undefined, Astro.request);
+
+let profile: Awaited<ReturnType<typeof client.profile>> | null = null;
+let papers: Array<{ id: string; title: string; openxivUrlId: string | null; createdAt: string }> = [];
+try {
+  profile = await client.profile(handle);
+  if (profile) {
+    const stream = await client.profileStream(profile.did, 10);
+    papers = stream.items
+      .filter((i) => i.kind === 'paper')
+      .slice(0, 3)
+      .map((i) =>
+        i.kind === 'paper'
+          ? {
+              id: i.paper.id,
+              title: i.paper.title,
+              openxivUrlId: i.paper.openxivUrlId,
+              createdAt: i.createdAt,
+            }
+          : { id: '', title: '', openxivUrlId: null, createdAt: '' },
+      );
+  }
+} catch (_e) {
+  profile = null;
+}
+
+const publicBase = import.meta.env.PUBLIC_WEB_BASE ?? 'http://localhost:4321';
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-Frame-Options" content="ALLOWALL" />
+    <style>
+      :root {
+        --bg: #fff;
+        --fg: #18181b;
+        --muted: #6b6f76;
+        --border: #e5e5ea;
+        --accent: #5a8fde;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0e0e10;
+          --fg: #ecedee;
+          --muted: #a0a3a8;
+          --border: #2a2a32;
+        }
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      .wrap {
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .head strong { font-size: 13px; }
+      .head .muted { color: var(--muted); font-size: 12px; }
+      ul { list-style: none; margin: 0; padding: 0; }
+      li { padding: 6px 0; border-top: 1px solid var(--border); font-size: 13px; }
+      li:first-child { border-top: 0; padding-top: 0; }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      {profile ? (
+        <>
+          <div class="head">
+            <strong>{profile.displayName}</strong>
+            <span class="muted">on <a href={publicBase} target="_blank">OpenXiv</a></span>
+          </div>
+          {papers.length > 0 ? (
+            <ul>
+              {papers.map((p) => (
+                <li>
+                  <a
+                    href={`${publicBase}/abs/${p.openxivUrlId ?? p.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >{p.title}</a>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p class="muted" style="margin: 0;">No published papers yet.</p>
+          )}
+        </>
+      ) : (
+        <p class="muted" style="margin: 0;">Profile not found.</p>
+      )}
+    </div>
+  </body>
+</html>

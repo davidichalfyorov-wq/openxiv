@@ -1,0 +1,29 @@
+{
+  "lexicon": 1,
+  "id": "app.openxiv.citation",
+  "description": "A directed citation from this author's paper/post to another paper. Builds the citation graph.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["fromUri", "to", "createdAt"],
+        "properties": {
+          "fromUri": { "type": "string", "format": "at-uri" },
+          "to": { "type": "ref", "ref": "#target" },
+          "context": { "type": "string", "maxLength": 500 },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "paperUri": { "type": "string", "format": "at-uri" },
+        "doi": { "type": "string", "maxLength": 200 },
+        "arxivId": { "type": "string", "maxLength": 64 }
+      }
+    }
+  }
+}

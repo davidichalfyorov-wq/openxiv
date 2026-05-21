@@ -1,0 +1,224 @@
+---
+import type { PaperDetail } from '../lib/api';
+
+interface Props {
+  paper: PaperDetail;
+}
+
+const { paper } = Astro.props;
+const paperId = paper.openxivUrlId ?? paper.id;
+const modalId = `cite-modal-${paper.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+const modalTitleId = `${modalId}-title`;
+const formats = [
+  { id: 'bibtex', label: 'BibTeX', ext: 'bib' },
+  { id: 'ris', label: 'RIS', ext: 'ris' },
+  { id: 'endnote', label: 'EndNote', ext: 'enw' },
+  { id: 'apa', label: 'APA 7', ext: 'txt' },
+  { id: 'mla', label: 'MLA 9', ext: 'txt' },
+  { id: 'chicago', label: 'Chicago 17', ext: 'txt' },
+  { id: 'ieee', label: 'IEEE', ext: 'txt' },
+] as const;
+---
+<button class="btn cite-trigger" type="button" data-cite-open={modalId}>Cite</button>
+
+<dialog id={modalId} class="cite-dialog" data-cite-dialog data-paper-id={paperId} aria-labelledby={modalTitleId}>
+  <form method="dialog" class="cite-shell">
+    <header class="cite-header">
+      <h2 id={modalTitleId}>Cite this paper</h2>
+      <button class="btn btn-sm" type="submit" aria-label="Close citation modal">Close</button>
+    </header>
+    <div class="cite-tabs" role="tablist" aria-label="Citation formats">
+      {formats.map((format, idx) => (
+        <button
+          class:list={['cite-tab', idx === 0 && 'cite-tab-active']}
+          type="button"
+          role="tab"
+          aria-selected={idx === 0 ? 'true' : 'false'}
+          data-cite-format={format.id}
+          data-cite-ext={format.ext}
+        >
+          {format.label}
+        </button>
+      ))}
+    </div>
+    <pre class="cite-output" data-cite-output tabindex="0">Loading citation...</pre>
+    <footer class="cite-actions">
+      <button class="btn btn-primary btn-sm" type="button" data-cite-copy>Copy</button>
+      <button class="btn btn-sm" type="button" data-cite-download>Download</button>
+      <span class="muted cite-status" data-cite-status aria-live="polite"></span>
+    </footer>
+  </form>
+</dialog>
+
+<script is:inline>
+  (function () {
+    var cache = new Map();
+
+    function flash(root, message) {
+      var status = root.querySelector('[data-cite-status]');
+      if (!status) return;
+      status.textContent = message;
+      window.setTimeout(function () {
+        status.textContent = '';
+      }, 1600);
+    }
+
+    function activeTab(root) {
+      return root.querySelector('.cite-tab-active') || root.querySelector('[data-cite-format]');
+    }
+
+    function citationUrl(root, format) {
+      var paperId = root.getAttribute('data-paper-id') || '';
+      return '/api-proxy/papers/' + encodeURIComponent(paperId) + '/citation?format=' + encodeURIComponent(format);
+    }
+
+    async function loadCitation(root, format) {
+      var output = root.querySelector('[data-cite-output]');
+      if (!output) return '';
+      var key = (root.getAttribute('data-paper-id') || '') + ':' + format;
+      if (cache.has(key)) {
+        output.textContent = cache.get(key);
+        return cache.get(key);
+      }
+      output.textContent = 'Loading citation...';
+      try {
+        var res = await fetch(citationUrl(root, format), { credentials: 'include', headers: { accept: 'text/plain' } });
+        if (!res.ok) throw new Error('citation request failed');
+        var text = await res.text();
+        cache.set(key, text);
+        output.textContent = text;
+        return text;
+      } catch {
+        output.textContent = 'Citation unavailable.';
+        return '';
+      }
+    }
+
+    document.querySelectorAll('[data-cite-open]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var id = button.getAttribute('data-cite-open');
+        var dialog = id ? document.getElementById(id) : null;
+        if (!dialog) return;
+        if (typeof dialog.showModal === 'function') dialog.showModal();
+        else dialog.setAttribute('open', 'open');
+        var tab = activeTab(dialog);
+        if (tab) loadCitation(dialog, tab.getAttribute('data-cite-format') || 'bibtex');
+      });
+    });
+
+    document.querySelectorAll('[data-cite-dialog]').forEach(function (dialog) {
+      dialog.querySelectorAll('[data-cite-format]').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+          dialog.querySelectorAll('[data-cite-format]').forEach(function (candidate) {
+            var selected = candidate === tab;
+            candidate.classList.toggle('cite-tab-active', selected);
+            candidate.setAttribute('aria-selected', selected ? 'true' : 'false');
+          });
+          loadCitation(dialog, tab.getAttribute('data-cite-format') || 'bibtex');
+        });
+      });
+
+      var copy = dialog.querySelector('[data-cite-copy]');
+      if (copy) {
+        copy.addEventListener('click', function () {
+          var text = (dialog.querySelector('[data-cite-output]') || {}).textContent || '';
+          navigator.clipboard.writeText(text).then(
+            function () { flash(dialog, 'Copied'); },
+            function () { flash(dialog, 'Select and copy'); }
+          );
+        });
+      }
+
+      var download = dialog.querySelector('[data-cite-download]');
+      if (download) {
+        download.addEventListener('click', function () {
+          var tab = activeTab(dialog);
+          var format = tab ? tab.getAttribute('data-cite-format') || 'bibtex' : 'bibtex';
+          var ext = tab ? tab.getAttribute('data-cite-ext') || 'txt' : 'txt';
+          loadCitation(dialog, format).then(function (text) {
+            if (!text) return;
+            var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'openxiv-citation.' + ext;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+          });
+        });
+      }
+    });
+  })();
+</script>
+
+<style>
+  .cite-dialog {
+    width: min(760px, calc(100vw - 24px));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0;
+    background: var(--bg-elevated);
+    color: var(--text);
+  }
+  .cite-dialog::backdrop {
+    background: rgba(15, 23, 42, 0.45);
+  }
+  .cite-shell {
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+  }
+  .cite-header,
+  .cite-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .cite-header h2 {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: 18px;
+  }
+  .cite-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .cite-tab {
+    border: 1px solid var(--border);
+    background: var(--bg-base);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    padding: 7px 10px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .cite-tab-active {
+    background: var(--tone-accent-soft);
+    border-color: var(--tone-accent);
+  }
+  .cite-output {
+    min-height: 180px;
+    max-height: 360px;
+    overflow: auto;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-base);
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.55;
+  }
+  .cite-status {
+    min-width: 90px;
+    text-align: right;
+    font-size: 13px;
+  }
+</style>

@@ -1,0 +1,23 @@
+{
+  "name": "@openxiv/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "install:browsers": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@citation-js/core": "^0.7.21",
+    "@citation-js/plugin-ris": "^0.7.21",
+    "@types/pg": "^8.11.10",
+    "@playwright/test": "^1.49.1",
+    "jose": "^5.9.6",
+    "pg": "^8.13.1",
+    "@retorquere/bibtex-parser": "^10.0.0",
+    "typescript": "^5.7.2"
+  },
+  "license": "AGPL-3.0-or-later"
+}

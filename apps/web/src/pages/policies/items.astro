@@ -1,0 +1,93 @@
+---
+import Base from '../../layouts/Base.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+---
+<Base
+  title="Content policy — OpenXiv"
+  description="OpenXiv content policy: authors keep copyright, pick a Creative Commons license, no paywalls, no embargoes."
+>
+  <main class="container-narrow">
+    <Breadcrumbs items={[{ name: 'Home', url: '/' }, { name: 'Policies', url: '/policies' }, { name: 'Content / item policy', url: '/policies/items' }]} />
+    <h1 class="title-serif">Content / item policy</h1>
+    <p class="muted">Last updated 2026-05-18. Plain English.</p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Copyright</h2>
+    <p class="body-serif">
+      Authors retain copyright on every paper deposited at OpenXiv.
+      We do not require a transfer or a publication agreement.
+      OpenXiv is a hosting and indexing layer; you keep the rights to
+      republish, license downstream, or move the work elsewhere.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Licensing</h2>
+    <p class="body-serif">
+      Pick a license at submit time. The submission wizard offers
+      three Creative Commons options:
+    </p>
+    <ul class="body-serif">
+      <li><strong>CC-BY-4.0</strong> (default) — anyone may reuse with
+        attribution.</li>
+      <li><strong>CC-BY-SA-4.0</strong> — same, but derivatives must
+        carry the same license (copyleft).</li>
+      <li><strong>CC0-1.0</strong> — you waive copyright entirely; the
+        work enters the public domain.</li>
+    </ul>
+    <p class="body-serif">
+      The license is recorded on the AT-proto disclosure record, in
+      the JSON-LD on the abstract page, and in the
+      <code>citation_license</code> meta tag for Google Scholar. It is
+      part of the immutable metadata.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Access</h2>
+    <p class="body-serif">
+      Every paper is open-access from the moment it publishes. We do
+      not run paywalls. We do not honour embargoes. If a publisher
+      requires an embargo before formal publication, deposit the
+      preprint after that date — once it's on OpenXiv, it stays
+      readable.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Versioning</h2>
+    <p class="body-serif">
+      A new version preserves the original URL and DOI: the v1 abstract
+      page keeps its identifier, and the v2 record lives at the same
+      OpenXiv id with a version suffix. Readers and citers can pin to a
+      specific version or to the canonical id (which always resolves
+      to the latest).
+    </p>
+    <p class="body-serif">
+      Each version's changelog is mandatory: what claim changed, what
+      method changed, what data changed, what references were added.
+      The Provenance Timeline on the abstract page shows the chain.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Modifications</h2>
+    <p class="body-serif">
+      Once a paper is published, only the author can modify its
+      content — and only by submitting a new version. We don't
+      silently edit text, fix typos, or replace figures on a
+      live record. A typo correction is a v2 with the typo noted in the
+      changelog.
+    </p>
+    <p class="body-serif">
+      Metadata corrections (author affiliation, ORCID) propagate
+      through Crossref and the AT-proto record without bumping the
+      version — see <a href="/policies/metadata">metadata policy</a>.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Withdrawal &amp; retraction</h2>
+    <p class="body-serif">
+      Withdrawal preserves the record. The abstract page renders a
+      "Withdrawn" badge with the author's stated reason; the PDF
+      remains downloadable so citation chains don't break. Full
+      details on <a href="/policies/takedown">the takedown policy</a>.
+    </p>
+
+    <p class="muted" style="margin-top: 24px;">
+      Related: <a href="/policies/metadata">Metadata policy</a> ·
+      <a href="/policies/submission">Submission policy</a> ·
+      <a href="/policies">All policies</a>.
+    </p>
+  </main>
+</Base>

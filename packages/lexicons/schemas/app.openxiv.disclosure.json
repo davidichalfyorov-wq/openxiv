@@ -1,0 +1,66 @@
+{
+  "lexicon": 1,
+  "id": "app.openxiv.disclosure",
+  "description": "Structured AI use disclosure for a paper. Required on submission. Authors attest to accuracy.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["paperUri", "level", "attestation", "createdAt"],
+        "properties": {
+          "paperUri": { "type": "string", "format": "at-uri" },
+          "level": {
+            "type": "string",
+            "knownValues": ["none", "assistant", "coauthor", "primary"],
+            "description": "none = no AI; assistant = grammar/phrasing only; coauthor = sections drafted by AI; primary = AI is principal author"
+          },
+          "aiUsed": {
+            "type": "array",
+            "maxLength": 8,
+            "items": {
+              "type": "string",
+              "knownValues": [
+                "ideation",
+                "literature",
+                "derivation",
+                "code",
+                "writing",
+                "figures",
+                "summary",
+                "translation"
+              ]
+            }
+          },
+          "models": {
+            "type": "array",
+            "maxLength": 20,
+            "items": { "type": "ref", "ref": "#modelRef" }
+          },
+          "notes": { "type": "string", "maxLength": 2000 },
+          "summaryAiGenerated": { "type": "boolean", "default": false },
+          "humanVerified": { "type": "boolean", "default": false },
+          "attestation": {
+            "type": "string",
+            "knownValues": ["i-attest-this-disclosure-is-accurate"]
+          },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    },
+    "modelRef": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "vendor": { "type": "string", "maxLength": 100 },
+        "version": { "type": "string", "maxLength": 50 },
+        "usage": {
+          "type": "string",
+          "knownValues": ["ideation", "literature", "derivation", "code", "writing", "figures", "summary", "translation", "other"]
+        }
+      }
+    }
+  }
+}

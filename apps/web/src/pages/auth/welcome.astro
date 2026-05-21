@@ -1,0 +1,286 @@
+---
+import Base from '../../layouts/Base.astro';
+import HandlePicker from '../../components/HandlePicker.tsx';
+import { serverClient } from '../../lib/api';
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const me = await serverClient(cookie, Astro.request).me().catch(() => null);
+
+// Unauthenticated visitors don't see the welcome flow — bounce to sign-in.
+if (!me || !me.authenticated) {
+  return Astro.redirect('/auth/sign-in?return=/auth/welcome', 302);
+}
+const user = me.user;
+if (!user) {
+  return Astro.redirect('/auth/sign-in?return=/auth/welcome', 302);
+}
+
+type StarterSuggestion = {
+  did: string;
+  handle: string;
+  label: string;
+  field: string;
+};
+
+const apiBase =
+  (typeof process !== 'undefined' && process.env?.INTERNAL_API_BASE) ||
+  (typeof process !== 'undefined' && process.env?.PUBLIC_API_BASE) ||
+  import.meta.env.PUBLIC_API_BASE ||
+  'http://api:4000';
+
+let starterSuggestions: StarterSuggestion[] = [];
+try {
+  const res = await fetch(`${apiBase}/api/bsky/starter-suggestions`, {
+    headers: { accept: 'application/json', cookie: cookie ?? '' },
+    signal: AbortSignal.timeout(2500),
+  });
+  if (res.ok) {
+    const body = (await res.json()) as { items?: StarterSuggestion[] };
+    starterSuggestions = body.items ?? [];
+  }
+} catch {
+  starterSuggestions = [];
+}
+
+const needsHandle = !user.handle;
+const displayName = user.displayName ?? '';
+const initial = (displayName.match(/[a-zA-Z0-9]+/) ?? [''])[0]?.toLowerCase().slice(0, 24) ?? '';
+---
+<Base title="Pick your handle — OpenXiv">
+  <main class="container-narrow welcome-page">
+    <h1 class="title-serif">Welcome to OpenXiv</h1>
+    {needsHandle ? (
+      <section class="welcome-section" aria-labelledby="handle-heading">
+        <h2 id="handle-heading" class="welcome-heading">Pick your handle</h2>
+        <p class="muted">
+          Your account is ready. Pick a handle — it's the short, memorable
+          identifier other researchers see on your profile and replies.
+        </p>
+        <p class="muted welcome-note">
+          3-30 characters: lowercase letters, digits, dot, underscore, hyphen.
+          It must start and end with a letter or digit.
+        </p>
+        <HandlePicker client:load initial={initial} />
+      </section>
+    ) : (
+      <p class="muted welcome-note">
+        Signed in as <a href={`/@${user.handle}`}>@{user.handle}</a>.
+      </p>
+    )}
+
+    <section class="welcome-section starter-section" aria-labelledby="starter-heading">
+      <div class="starter-head">
+        <div>
+          <h2 id="starter-heading" class="welcome-heading">Follow science on Bluesky</h2>
+          <p class="muted">
+            Start with a small set of physics and science accounts.
+          </p>
+        </div>
+        {starterSuggestions.length > 0 && (
+          <button class="btn btn-primary" type="button" data-follow-all>Follow all</button>
+        )}
+      </div>
+
+      {starterSuggestions.length > 0 ? (
+        <ul class="starter-list">
+          {starterSuggestions.map((s) => (
+            <li
+              class="starter-row"
+              data-starter-did={s.did}
+              data-starter-handle={s.handle}
+              data-starter-label={s.label}
+            >
+              <div class="starter-copy">
+                <strong>{s.label}</strong>
+                <span class="muted">@{s.handle}</span>
+                <span class="badge">{s.field}</span>
+              </div>
+              <button class="btn btn-sm" type="button" data-follow-one>Follow</button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p class="muted welcome-note">Starter suggestions are unavailable right now.</p>
+      )}
+      <p class="muted starter-status" aria-live="polite" data-starter-status></p>
+    </section>
+  </main>
+</Base>
+
+<script is:inline>
+  (function () {
+    var rows = Array.prototype.slice.call(document.querySelectorAll('[data-starter-did]'));
+    var allButton = document.querySelector('[data-follow-all]');
+    var status = document.querySelector('[data-starter-status]');
+
+    function setStatus(text) {
+      if (status) status.textContent = text || '';
+    }
+
+    function sleep(ms) {
+      return new Promise(function (resolve) {
+        window.setTimeout(resolve, ms);
+      });
+    }
+
+    function payload(row) {
+      return {
+        did: row.getAttribute('data-starter-did'),
+        handle: row.getAttribute('data-starter-handle') || undefined,
+        displayName: row.getAttribute('data-starter-label') || undefined,
+      };
+    }
+
+    function rowButton(row) {
+      return row.querySelector('[data-follow-one]');
+    }
+
+    async function follow(row) {
+      var button = rowButton(row);
+      if (button && button.getAttribute('data-queued') === '1') return true;
+      if (button) button.disabled = true;
+      var body = payload(row);
+      var response = await fetch('/api-proxy/me/bluesky/follows', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        if (button) button.disabled = false;
+        throw new Error('follow failed');
+      }
+      if (button) {
+        button.textContent = 'Queued';
+        button.setAttribute('data-queued', '1');
+      }
+      row.classList.add('starter-row-followed');
+      return true;
+    }
+
+    rows.forEach(function (row) {
+      var button = rowButton(row);
+      if (!button) return;
+      button.addEventListener('click', function () {
+        follow(row)
+          .then(function () {
+            setStatus('Queued ' + (row.getAttribute('data-starter-label') || 'account') + '.');
+          })
+          .catch(function () {
+            setStatus('Could not follow from this session. Link Bluesky in Settings and try again.');
+          });
+      });
+    });
+
+    if (allButton) {
+      allButton.addEventListener('click', async function () {
+        allButton.disabled = true;
+        setStatus('Queueing starter follows...');
+        var count = 0;
+        for (var i = 0; i < rows.length; i += 1) {
+          try {
+            if (await follow(rows[i])) count += 1;
+          } catch (_err) {
+            setStatus('Stopped after queueing ' + count + ' follows. Link Bluesky in Settings and try again.');
+            allButton.disabled = false;
+            return;
+          }
+          if (i < rows.length - 1) await sleep(1250);
+        }
+        setStatus('Queued ' + count + ' starter follows.');
+        allButton.disabled = false;
+      });
+    }
+  })();
+</script>
+
+<style>
+  .welcome-page {
+    max-width: 680px;
+    margin-top: 48px;
+  }
+
+  .welcome-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .welcome-heading {
+    margin: 0 0 8px;
+    font-family: var(--font-serif);
+    font-size: 20px;
+  }
+
+  .welcome-note {
+    margin: 10px 0 20px;
+    font-size: 14px;
+  }
+
+  .starter-head {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+  }
+
+  .starter-head p {
+    margin: 0;
+  }
+
+  .starter-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .starter-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .starter-copy {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .starter-copy strong,
+  .starter-copy .muted {
+    overflow-wrap: anywhere;
+  }
+
+  .starter-row-followed {
+    opacity: 0.72;
+  }
+
+  .starter-status {
+    min-height: 20px;
+    margin: 12px 0 0;
+    font-size: 13px;
+  }
+
+  @media (max-width: 620px) {
+    .starter-head,
+    .starter-row {
+      grid-template-columns: 1fr;
+    }
+
+    .starter-head {
+      display: grid;
+    }
+
+    .starter-row .btn,
+    .starter-head .btn {
+      width: 100%;
+    }
+  }
+</style>

@@ -1,0 +1,113 @@
+---
+import Base from '../../layouts/Base.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+---
+<Base
+  title="Preservation policy — OpenXiv"
+  description="How OpenXiv preserves preprints long-term: DOIs through Crossref, replicated storage, daily snapshots, handoff plan."
+>
+  <main class="container-narrow">
+    <Breadcrumbs items={[{ name: 'Home', url: '/' }, { name: 'Policies', url: '/policies' }, { name: 'Preservation policy', url: '/policies/preservation' }]} />
+    <h1 class="title-serif">Preservation policy</h1>
+    <p class="muted">Last updated 2026-05-18. Plain English.</p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">What we commit to</h2>
+    <p class="body-serif">
+      OpenXiv is a young single-operator repository (David Alfyorov,
+      Vilnius, LT). We are honest about that: we cannot promise a
+      multi-decade institutional commitment the way arXiv or Zenodo
+      can. What we <em>do</em> commit to:
+    </p>
+    <ul class="body-serif">
+      <li>DOI persistence through a registration agency (Crossref or a
+        sponsor membership). DOIs remain resolvable even if the
+        OpenXiv front-end is unavailable.</li>
+      <li>Replicated storage during normal operation (see "Storage" below).</li>
+      <li>A documented, advance-noticed handoff plan if we ever shut
+        down (see "If we shut down" below).</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Identifiers (DOIs)</h2>
+    <p class="body-serif">
+      DOIs are minted through Crossref under the OpenXiv member
+      prefix. The DOI is opaque
+      (<code>10.&#123;prefix&#125;/openxiv.&#123;openxiv_id&#125;</code>) and immutable:
+      it survives renaming, host migration, and registrar changes.
+      DOIs are transferable — if OpenXiv winds down, the prefix
+      record can be reassigned to whichever archive takes custody.
+    </p>
+    <p class="body-serif">
+      Until Crossref membership credentials are provisioned, papers
+      publish with their OpenXiv id (e.g.
+      <code>openxiv:cs.AI.2026.00001</code>) as the canonical
+      reference. The OpenXiv id is itself persistent — the canonical
+      URL <code>https://openxiv.net/abs/&#123;id&#125;</code> resolves
+      forever, with or without a DOI.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Storage</h2>
+    <p class="body-serif">
+      Primary storage runs on MinIO inside the production stack
+      (currently hosted in the EU, Contabo VPS 20). The dataset comprises
+      the source archive, the compiled PDF, the LaTeXML HTML, the
+      cover page, the figure crops, and the per-version content hash.
+    </p>
+    <p class="body-serif">
+      Backups: daily snapshots are taken of the Postgres database and
+      the MinIO bucket; we retain 30 days of rolling snapshots and
+      cut a full quarterly archive into cold storage on a separate
+      provider.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Federation</h2>
+    <p class="body-serif">
+      Every published paper exists as an AT-proto record in the
+      author's Personal Data Server — typically Bluesky's, or a
+      self-hosted PDS. If OpenXiv's App View goes offline, the
+      authoritative records still live in those PDSes and can be
+      re-indexed by any AT-proto-aware view. This is the most
+      durable preservation layer we have today, because it does not
+      depend on OpenXiv staying alive.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">If we shut down</h2>
+    <p class="body-serif">
+      We commit to a 6-month shutdown notice posted prominently on
+      every abstract page, the home page, and the OAI-PMH feed.
+      Within that window we will:
+    </p>
+    <ul class="body-serif">
+      <li>Transfer the full content + metadata corpus to
+        <strong>Zenodo</strong> under the same OpenXiv ids; the
+        Zenodo URLs become the long-term resolution target.</li>
+      <li>Transfer the Crossref DOI prefix records to point to the
+        Zenodo locations.</li>
+      <li>Publish a final crawl-friendly archive (Atom + sitemap)
+        and submit it to the Internet Archive.</li>
+    </ul>
+    <p class="body-serif">
+      No content is deleted on shutdown; everything that was open
+      stays open. The handoff is the inverse of the launch: ids
+      stay stable, content stays addressable, the host changes.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Roadmap</h2>
+    <p class="body-serif">
+      Items not yet shipped but on the preservation roadmap:
+    </p>
+    <ul class="body-serif">
+      <li>Software Heritage deposit for any code archives bundled
+        with submissions.</li>
+      <li>Internet Archive Wayback-Machine sitemap submission for
+        every published abstract page.</li>
+      <li>CLOCKKS-style multi-host replication once the corpus is
+        large enough to warrant the operational overhead.</li>
+    </ul>
+
+    <p class="muted" style="margin-top: 24px;">
+      Related: <a href="/policies/metadata">Metadata policy</a> ·
+      <a href="/policies/items">Content policy</a> ·
+      <a href="/policies">All policies</a>.
+    </p>
+  </main>
+</Base>

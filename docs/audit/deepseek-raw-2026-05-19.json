@@ -1,0 +1,8 @@
+{
+  "startedAt": "2026-05-19T12:34:50.077Z",
+  "model": "deepseek-v4-flash",
+  "keyPrefix": "sk-1677a",
+  "status": 200,
+  "ok": true,
+  "body": "{\"id\":\"a8a7a5ab-9c0d-493a-bf82-fc961084284a\",\"object\":\"chat.completion\",\"created\":1779194090,\"model\":\"deepseek-v4-flash\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Photons are massless elementary particles that carry electromagnetic radiation, including visible light, and exhibit both wave-like and particle-like properties.\",\"reasoning_content\":\"We need to respond with one sentence about photons. The user asked \\\"One sentence on photons.\\\" So we just provide a single sentence that defines or describes photons. Keep it concise and accurate.\"},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":65,\"total_tokens\":74,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":38},\"prompt_cache_hit_tokens\":0,\"prompt_cache_miss_tokens\":9},\"system_fingerprint\":\"fp_8b330d02d0_prod0820_fp8_kvcache_20260402\"}"
+}

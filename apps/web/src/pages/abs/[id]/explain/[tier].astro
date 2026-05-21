@@ -1,0 +1,191 @@
+---
+import Base from '../../../../layouts/Base.astro';
+import KaTeXHead from '../../../../components/KaTeXHead.astro';
+import { serverClient } from '../../../../lib/api';
+
+const TIERS = ['school', 'undergrad', 'expert'] as const;
+type Tier = (typeof TIERS)[number];
+
+const TIER_META: Record<Tier, { label: string; audience: string; subhead: string }> = {
+  school: {
+    label: 'For a curious high-schooler',
+    audience: 'a curious high-school student',
+    subhead: 'Plain language. Few jargon words; every one is defined inline.',
+  },
+  undergrad: {
+    label: 'For an undergraduate in the field',
+    audience: 'an undergraduate who has taken intro courses in this field',
+    subhead: 'Assumes 1–2 courses of background. Domain terms may appear without definition.',
+  },
+  expert: {
+    label: 'For a researcher in an adjacent area',
+    audience: 'a researcher one or two specialties over',
+    subhead: 'Assumes deep technical literacy. Bridges to the closest neighbouring fields.',
+  },
+};
+
+const rawId = Astro.params.id;
+const rawTier = Astro.params.tier;
+if (!rawId || !rawTier) {
+  return new Response('Missing id or tier', { status: 400 });
+}
+if (!TIERS.includes(rawTier as Tier)) {
+  // unknown tier — redirect back to the abstract page
+  return Astro.redirect(`/abs/${rawId}`, 302);
+}
+
+const tier = rawTier as Tier;
+const tierMeta = TIER_META[tier];
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let paper: Awaited<ReturnType<typeof client.getPaper>> | null = null;
+try {
+  paper = await client.getPaper(rawId);
+} catch {
+  paper = null;
+}
+
+if (paper === null) {
+  return new Response('Paper not found', { status: 404 });
+}
+
+const summary = paper.summaries.find((s) => s.tier === tier);
+
+const publicBase = import.meta.env.PUBLIC_WEB_BASE ?? 'http://localhost:4321';
+const canonical = paper.openxivUrlId
+  ? `${publicBase}/abs/${paper.openxivUrlId}`
+  : `${publicBase}/abs/${paper.id}`;
+const mirrorUrl = `${publicBase}/abs/${paper.openxivUrlId ?? paper.id}/explain/${tier}`;
+
+// Schema.org Article structured data for the explainer mirror itself.
+// `isBasedOn` references the canonical paper so crawlers know this is a
+// derived rendering — not original scholarship — and consolidate signal to
+// /abs/{id}.
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Article',
+  headline: `${paper.title} — ${tierMeta.label}`,
+  name: `${paper.title} — ${tierMeta.label}`,
+  url: mirrorUrl,
+  inLanguage: 'en',
+  audience: { '@type': 'Audience', audienceType: tierMeta.audience },
+  datePublished: (paper.publishedAt ?? paper.createdAt).slice(0, 10),
+  isBasedOn: {
+    '@type': 'ScholarlyArticle',
+    headline: paper.title,
+    identifier: paper.openxivId ?? paper.id,
+    url: canonical,
+  },
+  publisher: { '@type': 'Organization', name: 'OpenXiv', url: publicBase },
+};
+
+function safeJsonLd(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026');
+}
+---
+<Base
+  title={`${paper.title} — ${tierMeta.label}`}
+  description={summary?.text?.slice(0, 200) ?? `Plain-language explainer of ${paper.title} for ${tierMeta.audience}.`}
+>
+  <Fragment slot="head">
+    <link rel="canonical" href={canonical} />
+    <KaTeXHead />
+    <meta name="robots" content="index,follow" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content={`${paper.title} — ${tierMeta.label}`} />
+    {summary?.text && <meta property="og:description" content={summary.text.slice(0, 240)} />}
+    <meta property="og:url" content={mirrorUrl} />
+    <meta property="og:site_name" content="OpenXiv" />
+    <script is:inline type="application/ld+json" set:html={safeJsonLd(jsonLd)} />
+  </Fragment>
+
+  <main class="container">
+    <article class="explainer-mirror">
+      <p class="muted explainer-trail">
+        <a href={`/abs/${paper.openxivUrlId ?? paper.id}`}>← {paper.openxivId ?? paper.id}</a>
+        {paper.openxivId && <span> · {paper.primaryCategory}</span>}
+      </p>
+      <h1 class="title-serif">{paper.title}</h1>
+      <p class="muted explainer-tier-line">
+        Explainer at the level of <strong>{tierMeta.label.replace(/^For /, '')}</strong>.
+        {' '}
+        <a href={canonical}>Read the original paper</a>.
+      </p>
+
+      <div class="explainer-tier-tabs" role="tablist" aria-label="Other explainer levels">
+        {TIERS.map((t) => (
+          <a
+            class={`explainer-tab ${t === tier ? 'explainer-tab-active' : ''}`}
+            role="tab"
+            aria-selected={t === tier ? 'true' : 'false'}
+            href={`/abs/${paper.openxivUrlId ?? paper.id}/explain/${t}`}
+          >
+            {TIER_META[t].label}
+          </a>
+        ))}
+      </div>
+
+      {summary ? (
+        <section class="explainer-body card">
+          <p class="muted explainer-audience">{tierMeta.subhead}</p>
+          <p class="body-serif explainer-text">{summary.text}</p>
+          <p class="muted explainer-meta">
+            {summary.aiGenerated ? 'AI-generated' : 'Author-written'}
+            {summary.aiModel ? ` (${summary.aiModel})` : ''}
+            {summary.createdAt ? ` · created ${summary.createdAt.slice(0, 10)}` : ''}
+          </p>
+        </section>
+      ) : (
+        <section class="card">
+          <p class="muted">
+            No explainer at this level has been generated yet. Try the
+            <a href={canonical}> abstract page</a> to request one, or pick a different level above.
+          </p>
+        </section>
+      )}
+
+      <p class="muted explainer-disclaimer">
+        Explainers are best-effort summaries — they round corners. For the
+        authoritative claims, read the <a href={canonical}>paper itself</a>.
+      </p>
+    </article>
+  </main>
+</Base>
+
+<style>
+  .explainer-mirror { max-width: 720px; margin: 0 auto; }
+  .explainer-trail { margin: 0 0 8px; font-size: 13px; }
+  .explainer-tier-line { margin: 6px 0 18px; font-size: 14px; }
+  .explainer-tier-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 18px;
+  }
+  .explainer-tab {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 13px;
+    text-decoration: none;
+    color: var(--text-secondary);
+    background: var(--bg-base);
+  }
+  .explainer-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .explainer-tab-active {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-color: var(--accent);
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+  .explainer-body { padding: 18px 20px; }
+  .explainer-audience { margin: 0 0 12px; font-size: 13px; font-style: italic; }
+  .explainer-text { margin: 0; font-size: 16px; line-height: 1.7; }
+  .explainer-meta { margin: 14px 0 0; font-size: 12px; }
+  .explainer-disclaimer { margin: 24px 0 0; font-size: 12px; }
+</style>

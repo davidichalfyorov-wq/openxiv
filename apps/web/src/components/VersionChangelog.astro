@@ -1,0 +1,160 @@
+---
+import { serverClient } from '../lib/api';
+import type { PaperDetail } from '../lib/api';
+
+interface Props {
+  paper: PaperDetail;
+}
+const { paper } = Astro.props;
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let data: Awaited<ReturnType<typeof client.listVersions>> | null = null;
+try {
+  data = await client.listVersions(paper.id);
+} catch (_e) {
+  data = null;
+}
+
+function relativeDate(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return 'just now';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  const mo = Math.floor(day / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.floor(day / 365)}y ago`;
+}
+
+const BECAUSE_LABEL: Record<string, string> = {
+  review: 'in response to a review',
+  comment: 'in response to community comment',
+  self: 'self-initiated',
+  retraction_request: 'after a retraction request',
+};
+
+const FLAG_LABEL: Record<string, string> = {
+  claim: 'Claim',
+  method: 'Method',
+  data: 'Data',
+  refs: 'References',
+};
+
+// Only render the widget when there's at least one version with a changelog
+// or more than one version in total — a single v1 with no changelog adds
+// nothing the reader can act on.
+const versionItems = Array.isArray(data?.items) ? data.items : [];
+const hasMultiple = versionItems.length > 1;
+const hasAnyChangelog = versionItems.some((v) => v.changelog !== null);
+const show = versionItems.length > 0 && (hasMultiple || hasAnyChangelog);
+---
+{show && data && (
+  <article class="card vchange" aria-labelledby="vchange-heading">
+    <header class="vchange-head">
+      <h2 id="vchange-heading">Version Changelog</h2>
+      <p class="muted vchange-subtitle">What changed between versions — and what's still unresolved.</p>
+    </header>
+    <ol class="vchange-list">
+      {versionItems.map((v) => (
+        <li class="vchange-item">
+          <div class="vchange-row">
+            <span class="vchange-pill">v{v.versionNumber}</span>
+            <time class="muted vchange-time" datetime={v.createdAt}>{relativeDate(v.createdAt)}</time>
+            {v.changelog?.previousVersionId && (
+              <a
+                class="muted vchange-diff"
+                href={v.changelog.diffUrl ?? `/api-proxy/papers/${encodeURIComponent(paper.id)}/pdf`}
+                title={v.changelog.diffUrl ? 'Open generated diff' : 'Open the current PDF'}
+              >
+                compare with v{v.versionNumber - 1} →
+              </a>
+            )}
+          </div>
+          {v.changelog === null ? (
+            <p class="muted vchange-no-log">No structured changelog (likely the initial submission).</p>
+          ) : (
+            <div class="vchange-body">
+              {Object.keys(v.changelog.changeFlags).length > 0 && (
+                <ul class="vchange-flags">
+                  {Object.entries(v.changelog.changeFlags)
+                    .filter(([, on]) => on)
+                    .map(([k]) => (
+                      <li class="vchange-flag-pill">{FLAG_LABEL[k] ?? k}</li>
+                    ))}
+                </ul>
+              )}
+              {v.changelog.becauseOf && (
+                <p class="vchange-reason">
+                  <span class="muted">Reason:</span>{' '}
+                  <strong>{BECAUSE_LABEL[v.changelog.becauseOf] ?? v.changelog.becauseOf}</strong>
+                </p>
+              )}
+              {v.changelog.note && <p class="vchange-note">{v.changelog.note}</p>}
+              {v.changelog.unresolved && (
+                <p class="vchange-unresolved">
+                  <strong>Still unresolved:</strong> {v.changelog.unresolved}
+                </p>
+              )}
+            </div>
+          )}
+        </li>
+      ))}
+    </ol>
+  </article>
+)}
+
+<style>
+  .vchange { padding: 14px 16px; }
+  .vchange-head h2 { margin: 0; font-family: var(--font-serif); font-size: 16px; }
+  .vchange-subtitle { margin: 4px 0 12px; font-size: 13px; }
+  .vchange-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+  .vchange-item {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-base);
+  }
+  .vchange-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .vchange-pill {
+    display: inline-block;
+    padding: 1px 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+    border-radius: 999px;
+  }
+  .vchange-time { font-size: 12px; }
+  .vchange-diff { font-size: 12px; }
+  .vchange-no-log { margin: 6px 0 0; font-size: 12px; font-style: italic; }
+
+  .vchange-body { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+  .vchange-flags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .vchange-flag-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--tone-info) 14%, transparent);
+    color: var(--tone-info);
+  }
+  .vchange-reason { margin: 4px 0 0; font-size: 13px; }
+  .vchange-note { margin: 4px 0 0; font-size: 14px; line-height: 1.5; }
+  .vchange-unresolved {
+    margin: 6px 0 0;
+    padding: 8px 10px;
+    border-left: 3px solid var(--tone-caution);
+    background: color-mix(in srgb, var(--tone-caution) 6%, transparent);
+    font-size: 13px;
+  }
+</style>

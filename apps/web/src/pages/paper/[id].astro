@@ -1,0 +1,187 @@
+---
+import Base from '../../layouts/Base.astro';
+import AiBadge from '../../components/AiBadge.astro';
+import FiguresGallery from '../../components/FiguresGallery.astro';
+import { Explainer } from '../../components/Explainer';
+import KaTeXHead from '../../components/KaTeXHead.astro';
+import { PublishButton } from '../../components/PublishButton';
+import { serverClient } from '../../lib/api';
+import { formatPaperStatus } from '../../lib/paper-status';
+
+const { id } = Astro.params;
+if (!id) {
+  return new Response('Missing id', { status: 400 });
+}
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let me: Awaited<ReturnType<typeof client.me>> | null = null;
+try {
+  me = await client.me();
+} catch (_err) {
+  me = { authenticated: false };
+}
+
+let paper: Awaited<ReturnType<typeof client.getPaper>> | null = null;
+let error: string | null = null;
+try {
+  paper = await client.getPaper(id);
+} catch (err) {
+  error = (err as Error).message;
+}
+
+let figures: Array<{
+  idx: number;
+  imageUrl: string;
+  caption: string | null;
+  page: number | null;
+  type: 'figure' | 'table';
+}> = [];
+let figureExtraction: Awaited<ReturnType<typeof client.getPaperFigures>>['extraction'] = {
+  status: 'pending',
+};
+if (paper) {
+  try {
+    const r = await client.getPaperFigures(paper.id);
+    figures = r.figures;
+    figureExtraction = r.extraction;
+  } catch {
+    figures = [];
+    figureExtraction = { status: 'pending' };
+  }
+}
+
+// Once an openxiv id is allocated, the canonical URL is /abs/<urlId>.
+if (paper?.openxivUrlId) {
+  return Astro.redirect(`/abs/${paper.openxivUrlId}`, 302);
+}
+
+const canRetry =
+  me?.authenticated &&
+  paper &&
+  (me.user?.did === paper.submitterDid ||
+    me.user?.role === 'moderator' ||
+    me.user?.role === 'admin');
+---
+
+<Base title={paper?.title ?? 'paper'}>
+  <Fragment slot="head">
+    <KaTeXHead />
+  </Fragment>
+
+  <main class="container">
+    {
+      error && (
+        <div class="card" style="border-color: var(--tone-caution);">
+          <strong>Paper not found</strong>
+          <p class="muted" style="margin:6px 0 0;">
+            {error}
+          </p>
+        </div>
+      )
+    }
+
+    {
+      paper && (
+        <>
+          <div style="display:flex; flex-direction: column; gap: 8px;">
+            <div class="row" style="gap: 12px;">
+              <span class="badge badge-tone-neutral">{paper.primaryCategory}</span>
+              {paper.disclosure && <AiBadge level={paper.disclosure.level} />}
+              <span class="muted">{formatPaperStatus(paper.status)}</span>
+              {paper.doi && <span class="muted">doi:{paper.doi}</span>}
+            </div>
+            <h1 class="title-serif">{paper.title}</h1>
+            <div class="muted">
+              {paper.authors
+                .map((a) => (
+                  <span>
+                    {a.displayName}
+                    {a.affiliation ? ` (${a.affiliation})` : ''}
+                  </span>
+                ))
+                .reduce((acc, el, i) => (i === 0 ? [el] : [...acc, ', ', el]), [] as unknown[])}
+            </div>
+            {canRetry && (
+              <div style="margin-top: 4px;">
+                <PublishButton
+                  client:load
+                  paperId={paper.id}
+                  initialStatus={paper.status}
+                  lastError={paper.saga?.lastError ?? null}
+                />
+              </div>
+            )}
+          </div>
+
+          <div style="display:grid; grid-template-columns: 1.4fr 1fr; gap: 24px; margin-top: 24px;">
+            <section class="card" style="padding:0; overflow:hidden;">
+              {paper.latestVersion?.pdfUrl ? (
+                <iframe
+                  src={paper.latestVersion.pdfUrl}
+                  title="PDF preview"
+                  style="width: 100%; height: 80vh; border:0; background:#0a0a0c;"
+                />
+              ) : (
+                <div style="padding: 24px;" class="muted">
+                  PDF is being prepared.
+                </div>
+              )}
+            </section>
+
+            <section class="stack">
+              {paper.abstract && (
+                <article class="card">
+                  <h2 style="margin: 0 0 8px; font-family: var(--font-serif);">Abstract</h2>
+                  <p class="body-serif">{paper.abstract}</p>
+                </article>
+              )}
+
+              {paper.disclosure && (
+                <article class="card">
+                  <h2 style="margin: 0 0 8px; font-family: var(--font-serif); font-size: 16px;">
+                    AI disclosure
+                  </h2>
+                  <p class="muted" style="margin: 0 0 8px;">
+                    Level: <strong>{paper.disclosure.level}</strong>
+                  </p>
+                  {paper.disclosure.aiUsed.length > 0 && (
+                    <p class="muted" style="margin: 0 0 6px;">
+                      Used for: {paper.disclosure.aiUsed.join(', ')}
+                    </p>
+                  )}
+                  {paper.disclosure.models.length > 0 && (
+                    <p class="muted" style="margin: 0 0 6px;">
+                      Models: {paper.disclosure.models.map((m) => m.name).join(', ')}
+                    </p>
+                  )}
+                  {paper.disclosure.notes && (
+                    <p class="muted" style="margin: 6px 0 0; white-space: pre-wrap;">
+                      {paper.disclosure.notes}
+                    </p>
+                  )}
+                </article>
+              )}
+
+              <Explainer client:load paperId={paper.id} initial={paper.summaries} />
+
+              <FiguresGallery figures={figures} extraction={figureExtraction} />
+
+              {paper.latestVersion?.htmlUrl && (
+                <article class="card">
+                  <h2 style="margin: 0 0 8px; font-family: var(--font-serif); font-size: 16px;">
+                    HTML render
+                  </h2>
+                  <a href={paper.latestVersion.htmlUrl} target="_blank" rel="noreferrer">
+                    Open rendered HTML
+                  </a>
+                </article>
+              )}
+            </section>
+          </div>
+        </>
+      )
+    }
+  </main>
+</Base>

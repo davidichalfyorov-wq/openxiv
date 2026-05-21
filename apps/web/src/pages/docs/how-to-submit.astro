@@ -1,0 +1,173 @@
+---
+/**
+ * HowTo JSON-LD plus a visible step list. The same steps appear in both
+ * surfaces so an answer-engine reading the schema sees what a reader
+ * sees on the page.
+ *
+ * estimatedCost is set to 0 USD because submission is free; tools is
+ * the minimum set (a LaTeX toolchain, a Bluesky or ORCID identity,
+ * a browser). The HowTo block lets Google AI Mode lift a tabular
+ * "how to submit a preprint to OpenXiv" answer card.
+ */
+import Base from '../../layouts/Base.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { safeJsonLd, ORG_ID } from '../../lib/jsonld';
+
+const publicBase = 'https://openxiv.net';
+
+interface Step {
+  name: string;
+  text: string;
+}
+
+const steps: Step[] = [
+  {
+    name: 'Sign in',
+    text:
+      'Open openxiv.net and sign in. Researchers can connect ORCID for a verified author identity; anyone with a Bluesky account can sign in with did:plc instead. No institutional email is required.',
+  },
+  {
+    name: 'Prepare your LaTeX source',
+    text:
+      'Assemble a LaTeX project that compiles end to end with Tectonic. Include every \\input or \\include file, every bibliography file (.bib), and every figure as a referenced asset. PDF-only uploads are blocked: the source is what we compile.',
+  },
+  {
+    name: 'Pack the source as a tarball',
+    text:
+      'Create a single .tar.gz containing the project. The top-level entry should be the directory containing the main .tex file. Compress with gzip; the maximum accepted size is 100 MB.',
+  },
+  {
+    name: 'Upload at /submit',
+    text:
+      'Go to openxiv.net/submit and drop the tarball into the wizard. The pipeline compiles with Tectonic, converts to HTML with LaTeXML, extracts figures, and reports any compile or validation errors back to you before metadata entry.',
+  },
+  {
+    name: 'Fill the metadata form',
+    text:
+      'Provide title, author list with ORCID where available, primary category and any cross-listings, abstract, keywords, license (CC-BY-4.0 default), and the disclosure of any prior submission or journal status.',
+  },
+  {
+    name: 'Disclose any AI involvement',
+    text:
+      'Pick the AI disclosure level on the form: none, assistant, coauthor, or primary. If AI is involved, name the models. AI use is welcome; hidden AI use is a policy violation.',
+  },
+  {
+    name: 'Write the three explainer tiers',
+    text:
+      'OpenXiv generates draft explainers at three audiences (school, undergrad, expert) and lets you edit each one before publication. Verify the wording is accurate; the original PDF wins where they disagree.',
+  },
+  {
+    name: 'Submit',
+    text:
+      'Confirm the submission terms and press Submit. The paper is written as an app.openxiv.paper record to your PDS, indexed by the App View, and federated to Bluesky as a bridge post. The OpenXiv identifier and abstract page URL are returned.',
+  },
+];
+
+const howToLd = {
+  '@context': 'https://schema.org',
+  '@type': 'HowTo',
+  name: 'How to submit a preprint to OpenXiv',
+  description:
+    'Step-by-step instructions for submitting a preprint to OpenXiv, from sign-in through metadata, AI disclosure, explainer tiers, and final submission.',
+  url: `${publicBase}/docs/how-to-submit`,
+  inLanguage: 'en',
+  publisher: { '@id': ORG_ID },
+  totalTime: 'PT30M',
+  estimatedCost: {
+    '@type': 'MonetaryAmount',
+    currency: 'USD',
+    value: 0,
+  },
+  supply: [
+    { '@type': 'HowToSupply', name: 'A LaTeX source archive of the manuscript (.tar.gz)' },
+  ],
+  tool: [
+    { '@type': 'HowToTool', name: 'A LaTeX toolchain that compiles with Tectonic' },
+    { '@type': 'HowToTool', name: 'A Bluesky (did:plc) or ORCID identity' },
+    { '@type': 'HowToTool', name: 'A modern web browser' },
+  ],
+  step: steps.map((s, i) => ({
+    '@type': 'HowToStep',
+    position: i + 1,
+    name: s.name,
+    text: s.text,
+    url: `${publicBase}/docs/how-to-submit#step-${i + 1}`,
+  })),
+};
+---
+<Base
+  title="How to submit — OpenXiv"
+  description="Step-by-step instructions for submitting a preprint to OpenXiv: sign-in, LaTeX source, tarball, metadata, AI disclosure, explainer tiers, submit."
+>
+  <script slot="head" is:inline type="application/ld+json" set:html={safeJsonLd(howToLd)} />
+
+  <main class="container-narrow">
+    <Breadcrumbs
+      items={[
+        { name: 'Home', url: '/' },
+        { name: 'Docs', url: '/docs/how-to-submit' },
+        { name: 'How to submit', url: '/docs/how-to-submit' },
+      ]}
+    />
+    <h1 class="title-serif">How to submit a preprint</h1>
+    <p class="body-serif">
+      Submission is free. Independent researchers without an institutional
+      affiliation are welcome on the same terms as everyone else. Plan
+      for about 30 minutes the first time, less afterwards.
+    </p>
+    <p class="muted">
+      Cost: 0 USD. Required: a LaTeX source archive and a Bluesky
+      (did:plc) or ORCID identity.
+    </p>
+
+    <ol class="howto-steps">
+      {steps.map((s, i) => (
+        <li class="howto-step" id={`step-${i + 1}`}>
+          <h2 class="howto-step-name">
+            <span class="howto-step-index">{i + 1}.</span> {s.name}
+          </h2>
+          <p class="body-serif">{s.text}</p>
+        </li>
+      ))}
+    </ol>
+
+    <p class="muted" style="margin-top: 28px;">
+      Related: <a href="/policies/submission">Submission policy</a>,
+      <a href="/policies/metadata">Metadata policy</a>,
+      <a href="/about">About OpenXiv</a>,
+      <a href="/faq">FAQ</a>.
+    </p>
+  </main>
+</Base>
+
+<style>
+  .howto-steps {
+    list-style: none;
+    padding: 0;
+    margin: 20px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    counter-reset: howto-step;
+  }
+  .howto-step {
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+  }
+  .howto-step-name {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    margin: 0 0 6px;
+  }
+  .howto-step-index {
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .howto-step p {
+    margin: 0;
+    font-size: 14.5px;
+    line-height: 1.55;
+  }
+</style>

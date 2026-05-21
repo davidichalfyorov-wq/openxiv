@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/"
+                       xmlns:moz="http://www.mozilla.org/2006/browser/search/">
+  <ShortName>OpenXiv</ShortName>
+  <LongName>OpenXiv — open preprint search</LongName>
+  <Description>Section-level semantic search across OpenXiv scholarly preprints.</Description>
+  <Tags>preprint science research openxiv arxiv-alternative open-access</Tags>
+  <Contact>davidich.alfyorov@gmail.com</Contact>
+  <InputEncoding>UTF-8</InputEncoding>
+  <OutputEncoding>UTF-8</OutputEncoding>
+  <Image width="32" height="32" type="image/svg+xml">https://openxiv.net/favicon.svg</Image>
+  <Url type="text/html" method="get"
+       template="https://openxiv.net/search?q={searchTerms}" />
+  <Url type="application/opensearchdescription+xml" rel="self"
+       template="https://openxiv.net/opensearch.xml" />
+  <moz:SearchForm>https://openxiv.net/search</moz:SearchForm>
+  <Developer>David Alfyorov</Developer>
+  <Attribution>Search results © respective authors under their chosen licences</Attribution>
+  <SyndicationRight>open</SyndicationRight>
+  <AdultContent>false</AdultContent>
+  <Language>en</Language>
+</OpenSearchDescription>

@@ -1,0 +1,108 @@
+---
+import Base from '../../layouts/Base.astro';
+import { serverClient } from '../../lib/api';
+import { CATEGORIES } from '@openxiv/shared';
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+let me: Awaited<ReturnType<ReturnType<typeof serverClient>['me']>> | null = null;
+try {
+  me = await serverClient(cookie, Astro.request).me();
+} catch (_err) {
+  me = { authenticated: false };
+}
+
+if (!me?.authenticated) {
+  return Astro.redirect('/auth/sign-in?return=/prereg/new');
+}
+---
+<Base title="OpenXiv — pre-register a study">
+  <main class="container-narrow">
+    <h1 class="title-serif">Pre-register a study</h1>
+    <p class="muted" style="max-width: 60ch; margin-bottom: 18px;">
+      Lock in your hypothesis, methods, and expected outcome <em>before</em> data collection.
+      Later, when you submit the paper, readers can diff "what you said you'd find" against
+      "what you actually found" — that diff is the whole point.
+    </p>
+
+    <form id="prereg-form" class="stack">
+      <div>
+        <label class="field-label">Working title (optional)</label>
+        <input class="input" name="title" maxlength="500" />
+      </div>
+      <div>
+        <label class="field-label">Primary subject</label>
+        <select class="select" name="primaryCategory">
+          <option value="">— pick a subject —</option>
+          {CATEGORIES.map((c) => (
+            <option value={c.code}>{c.group} · {c.name} ({c.code})</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Hypothesis (20–2000 chars)</label>
+        <textarea class="textarea" name="hypothesis" rows="4" required minlength="20" maxlength="2000"></textarea>
+      </div>
+      <div>
+        <label class="field-label">Method plan (40–8000 chars)</label>
+        <textarea class="textarea" name="methodPlan" rows="8" required minlength="40" maxlength="8000"></textarea>
+      </div>
+      <div>
+        <label class="field-label">Expected outcome (20–4000 chars)</label>
+        <textarea class="textarea" name="expectedOutcome" rows="4" required minlength="20" maxlength="4000"></textarea>
+      </div>
+      <div>
+        <label class="field-label">Linked paper URI (optional, at://…)</label>
+        <input class="input" name="paperUri" placeholder="at://did:.../app.openxiv.paper/3k..." />
+      </div>
+      <label class="row" style="gap: 8px;">
+        <input type="checkbox" name="attest" required />
+        <span>I attest this pre-registration precedes data collection.</span>
+      </label>
+      <button class="btn btn-primary" type="submit">Register</button>
+      <p id="prereg-status" class="muted" style="display:none;"></p>
+    </form>
+  </main>
+</Base>
+
+<script is:inline>
+  document.getElementById('prereg-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    if (!(form instanceof HTMLFormElement)) return;
+    const status = document.getElementById('prereg-status');
+    if (!status) return;
+    status.style.display = 'block';
+    status.textContent = 'Registering…';
+
+    const data = new FormData(form);
+    if (!data.get('attest')) {
+      status.textContent = 'You must attest before registering.';
+      return;
+    }
+
+    const body = {
+      title: String(data.get('title') || '') || undefined,
+      primaryCategory: String(data.get('primaryCategory') || '') || undefined,
+      paperUri: String(data.get('paperUri') || '') || undefined,
+      hypothesis: String(data.get('hypothesis') || ''),
+      methodPlan: String(data.get('methodPlan') || ''),
+      expectedOutcome: String(data.get('expectedOutcome') || ''),
+      attestation: 'i-attest-this-prereg-precedes-data-collection',
+    };
+
+    const res = await fetch('/api-proxy/preregistrations', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      status.textContent = `Error ${res.status}: ${text.slice(0, 200)}`;
+      return;
+    }
+    const json = await res.json();
+    status.textContent = `Registered ✓ (id ${json.id}). PDS uri: ${json.uri ?? 'pending'}`;
+    form.reset();
+  });
+</script>

@@ -1,0 +1,84 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base
+  title="Transparency report — OpenXiv"
+  description="OpenXiv transparency log: every jurisdictional restriction, takedown notice, and moderation action, with date, scope, and legal basis."
+>
+  <main class="container-narrow">
+    <h1 class="title-serif">Transparency report</h1>
+    <p class="muted">Last updated 2026-05-19.</p>
+
+    <p class="body-serif">
+      This page logs every restriction or moderation action
+      OpenXiv has taken in response to legal demands, third-party
+      complaints, or our own editorial policy. The log is
+      append-only: reversed restrictions are marked as such but
+      not removed from the record.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Summary</h2>
+    <ul class="body-serif">
+      <li>Jurisdictional restrictions issued: <strong>0</strong></li>
+      <li>Takedown notices received: <strong>0</strong></li>
+      <li>Takedown notices honoured: <strong>0</strong></li>
+      <li>Authors affected by any action: <strong>0</strong></li>
+      <li>Items removed entirely: <strong>0</strong></li>
+    </ul>
+
+    <p class="body-serif">
+      OpenXiv has neither received nor issued any restrictions to
+      date. When that changes, the detailed log below will be
+      updated.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Detailed log</h2>
+    <p class="muted">
+      Each entry will list: date, item id, jurisdiction (if
+      applicable), legal basis cited, action taken, current
+      status.
+    </p>
+    <p class="body-serif" style="margin-top: 16px;">
+      <em>No entries yet. The log appears here when the first
+      action is recorded.</em>
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">How we count</h2>
+    <ul class="body-serif">
+      <li><strong>Jurisdictional restriction</strong> — content
+        stays in our archive; access is blocked from a specific
+        country in response to a binding legal demand. See
+        <a href="/policies/jurisdictional-restrictions">jurisdictional restrictions</a>
+        for the full process.</li>
+      <li><strong>Takedown notice received</strong> — a
+        third-party copyright or content complaint reached us. We
+        document every notice received, regardless of whether it
+        was honoured.</li>
+      <li><strong>Takedown honoured</strong> — content was removed
+        or restricted in response to a valid notice. The decision
+        is documented per <a href="/dmca">DMCA intake</a> and our
+        <a href="/policies/takedown">takedown policy</a>.</li>
+      <li><strong>Item removed entirely</strong> — content removed
+        from the archive. Only happens for confirmed plagiarism,
+        fraud, or court order. The DOI continues to resolve to a
+        tombstone page citing the removal reason.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Why this page exists</h2>
+    <p class="body-serif">
+      Transparency reports are the standard way academic
+      publishers, journalistic outlets, and knowledge platforms
+      demonstrate that they are not silent censors. Publishing
+      every action keeps the operator accountable to authors,
+      readers, and the public record. The number we want on this
+      page is zero; the alternative we refuse is hidden actions.
+    </p>
+
+    <p class="muted" style="margin-top: 24px;">
+      Related: <a href="/policies/jurisdictional-restrictions">Jurisdictional restrictions</a>
+      · <a href="/policies/takedown">Takedown policy</a>
+      · <a href="/dmca">DMCA intake</a>
+      · <a href="/policies">All policies</a>.
+    </p>
+  </main>
+</Base>

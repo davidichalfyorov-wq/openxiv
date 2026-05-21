@@ -1,0 +1,520 @@
+---
+import type { CategoryBrowse } from '@openxiv/shared';
+
+interface Props {
+  browse: CategoryBrowse;
+  compact?: boolean;
+}
+
+const { browse, compact = false } = Astro.props;
+
+const visibleGroups = compact
+  ? browse.groups
+      .filter((group) => group.paperCount > 0 || group.categories.some((category) => category.paperCount > 0))
+      .slice(0, 8)
+  : browse.groups;
+const groups = visibleGroups.length > 0 ? visibleGroups : browse.groups.slice(0, compact ? 8 : undefined);
+const categoryLimit = compact ? 12 : Number.POSITIVE_INFINITY;
+const popularLimit = compact ? 6 : 12;
+const totalLabel =
+  browse.totalPublished === 1
+    ? '1 categorized paper'
+    : `${browse.totalPublished} categorized papers`;
+
+function groupId(group: string): string {
+  return `browse-${group.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+}
+
+function groupCategories(group: (typeof browse.groups)[number]) {
+  const active = group.categories.filter((category) => category.paperCount > 0);
+  const source = compact && active.length > 0 ? active : group.categories;
+  return source.slice(0, categoryLimit);
+}
+---
+
+<section
+  class={`home-browse ${compact ? 'home-browse-compact' : 'home-browse-full'}`}
+  id="browse"
+  aria-labelledby="browse-heading"
+>
+  <div class="browse-head">
+    <div>
+      <p class="eyebrow">Browse</p>
+      <h2 id="browse-heading" class="title-serif">Browse by subject</h2>
+      <p class="browse-intro muted">
+        Find preprints by field, topic, or exact category code without scrolling through the feed.
+      </p>
+    </div>
+    <a class="browse-total" href="/browse">{totalLabel}</a>
+  </div>
+
+  <form class="browse-search" action="/search" method="get">
+    <label class="sr-only" for={compact ? 'browse-q-compact' : 'browse-q'}>Search papers</label>
+    <input
+      id={compact ? 'browse-q-compact' : 'browse-q'}
+      name="q"
+      type="search"
+      autocomplete="off"
+      placeholder="Search papers, authors, categories"
+      data-browse-search
+    />
+    <button class="btn btn-primary" type="submit">Search</button>
+  </form>
+
+  {browse.popular.length > 0 && (
+    <div class="browse-popular" aria-label="Active subjects">
+      {browse.popular.slice(0, popularLimit).map((category) => (
+        <a class="browse-popular-link" href={category.href}>
+          <span>{category.name}</span>
+          <code>{category.code}</code>
+          <strong>{category.paperCount}</strong>
+        </a>
+      ))}
+    </div>
+  )}
+
+  <div class="browse-layout">
+    <div class="browse-tabs" data-browse-sidebar aria-label="Subject groups">
+      {groups.map((group, index) => (
+        <button
+          type="button"
+          class={`browse-tab-btn ${index === 0 ? 'active' : ''}`}
+          data-group-target={groupId(group.group)}
+        >
+          <span class="browse-tab-name">{group.group}</span>
+          {group.paperCount > 0 && <span class="browse-tab-count">{group.paperCount}</span>}
+        </button>
+      ))}
+    </div>
+
+    <div class="browse-content" data-browse-content>
+      {groups.map((group, index) => {
+        const categories = groupCategories(group);
+        const hiddenCount = Math.max(0, group.categories.length - categories.length);
+        return (
+          <div
+            class="browse-pane"
+            id={groupId(group.group)}
+            data-browse-group
+            style={index === 0 ? 'display: block;' : 'display: none;'}
+          >
+            <div class="browse-pane-header">
+              <h3>{group.group}</h3>
+              <span class="browse-pane-count">{group.paperCount} papers</span>
+            </div>
+            <div class="browse-category-grid">
+              {categories.map((category) => (
+                <a
+                  class="browse-category"
+                  href={category.href}
+                  data-browse-card
+                  data-search={`${category.name} ${category.code} ${category.group}`}
+                >
+                  <span class="browse-category-name">{category.name}</span>
+                  <span class="browse-category-meta">
+                    <code>{category.code}</code>
+                    <strong>{category.paperCount}</strong>
+                  </span>
+                </a>
+              ))}
+            </div>
+            {compact && hiddenCount > 0 && (
+              <a class="browse-more-link" href="/browse">
+                Browse all {group.group} categories
+              </a>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  </div>
+  <p class="browse-empty muted" data-browse-empty hidden>No matching subjects.</p>
+</section>
+
+<script is:inline>
+  (function () {
+    var root = document.getElementById('browse');
+    if (!root) return;
+    var input = root.querySelector('[data-browse-search]');
+    var cards = Array.prototype.slice.call(root.querySelectorAll('[data-browse-card]'));
+    var groups = Array.prototype.slice.call(root.querySelectorAll('[data-browse-group]'));
+    var sidebar = root.querySelector('[data-browse-sidebar]');
+    var buttons = Array.prototype.slice.call(root.querySelectorAll('.browse-tab-btn'));
+    var empty = root.querySelector('[data-browse-empty]');
+    if (!input || cards.length === 0) return;
+
+    var activeGroupId = buttons[0] ? buttons[0].getAttribute('data-group-target') : '';
+
+    buttons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var targetId = btn.getAttribute('data-group-target');
+        activeGroupId = targetId;
+
+        buttons.forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+
+        groups.forEach(function (group) {
+          group.style.display = group.id === targetId ? 'block' : 'none';
+        });
+      });
+    });
+
+    function applyFilter() {
+      var query = String(input.value || '').trim().toLowerCase();
+      var visibleTotal = 0;
+
+      if (query) {
+        if (sidebar) sidebar.style.display = 'none';
+
+        cards.forEach(function (card) {
+          var text = String(card.getAttribute('data-search') || '').toLowerCase();
+          var match = text.indexOf(query) !== -1;
+          card.style.display = match ? 'grid' : 'none';
+          if (match) visibleTotal += 1;
+        });
+
+        groups.forEach(function (group) {
+          var groupCards = Array.prototype.slice.call(group.querySelectorAll('[data-browse-card]'));
+          var groupVisible = groupCards.some(function (card) {
+            return card.style.display !== 'none';
+          });
+          group.style.display = groupVisible ? 'block' : 'none';
+        });
+      } else {
+        if (sidebar) sidebar.style.display = 'flex';
+
+        cards.forEach(function (card) {
+          card.style.display = 'grid';
+        });
+
+        groups.forEach(function (group) {
+          group.style.display = group.id === activeGroupId ? 'block' : 'none';
+        });
+
+        visibleTotal = cards.length;
+      }
+
+      if (empty) empty.hidden = visibleTotal !== 0;
+    }
+
+    input.addEventListener('input', applyFilter);
+  })();
+</script>
+
+<style>
+  .home-browse {
+    margin: 28px 0;
+    padding: 22px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .home-browse-compact {
+    margin-top: 24px;
+  }
+
+  .browse-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 14px;
+  }
+
+  .browse-head h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .browse-intro {
+    margin: 4px 0 0;
+    max-width: 620px;
+  }
+
+  .eyebrow {
+    margin: 0 0 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .browse-total {
+    flex: none;
+    font-size: 12px;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 5px 10px;
+    background: var(--bg-elev);
+    text-decoration: none;
+  }
+
+  .browse-total:hover {
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .browse-search {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .browse-search input {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elev);
+    color: var(--text-primary);
+    padding: 9px 12px;
+    font: inherit;
+    font-size: 14px;
+    transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  }
+
+  .browse-search input:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--bg-base);
+    box-shadow: 0 0 0 3px var(--accent-bg);
+  }
+
+  .browse-popular {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .browse-popular-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: inherit;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elev);
+    padding: 6px 10px;
+    font-size: 12px;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+
+  .browse-popular-link span {
+    font-weight: 500;
+  }
+
+  .browse-popular-link code,
+  .browse-category code {
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: var(--bg-base);
+    padding: 1px 4px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+
+  .browse-popular-link strong,
+  .browse-category strong,
+  .browse-pane-count,
+  .browse-tab-count {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .browse-popular-link:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-hover);
+    text-decoration: none;
+  }
+
+  .browse-layout {
+    display: grid;
+    gap: 12px;
+  }
+
+  .browse-tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+  }
+
+  .browse-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 34px;
+    padding: 7px 10px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 12px;
+    text-align: left;
+    white-space: nowrap;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    cursor: pointer;
+  }
+
+  .browse-tab-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .browse-tab-btn.active {
+    background: var(--accent-bg);
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+    font-weight: 600;
+  }
+
+  .browse-tab-count {
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 99px;
+    color: var(--text-tertiary);
+  }
+
+  .browse-content {
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    overflow: hidden;
+  }
+
+  .home-browse-full .browse-content {
+    max-height: 620px;
+    overflow-y: auto;
+  }
+
+  .browse-pane {
+    animation: browseFadeIn 160ms ease;
+  }
+
+  @keyframes browseFadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(3px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .browse-pane-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+    padding: 11px 14px;
+  }
+
+  .browse-pane-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .browse-pane-count {
+    color: var(--text-tertiary);
+  }
+
+  .browse-category-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .home-browse-full .browse-category-grid {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+
+  .browse-category {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    padding: 10px 14px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    color: inherit;
+    text-decoration: none;
+    transition: background-color 120ms ease;
+  }
+
+  .browse-category:hover {
+    background: var(--bg-hover);
+    text-decoration: none;
+  }
+
+  .browse-category-name {
+    min-width: 0;
+    font-size: 13px;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+
+  .browse-category-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .browse-more-link {
+    display: block;
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-decoration: none;
+  }
+
+  .browse-more-link:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .browse-empty {
+    margin: 12px 0 0;
+    font-size: 13px;
+  }
+
+  @media (max-width: 720px) {
+    .browse-head {
+      display: grid;
+      gap: 10px;
+    }
+
+    .browse-total {
+      justify-self: start;
+    }
+
+    .browse-search {
+      grid-template-columns: 1fr;
+    }
+
+    .browse-category-grid,
+    .home-browse-full .browse-category-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

@@ -1,0 +1,118 @@
+---
+import Base from '../../layouts/Base.astro';
+import { serverClient } from '../../lib/api';
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const apiBase = import.meta.env.PUBLIC_API_BASE ?? 'http://localhost:4000';
+const ret = new URL(Astro.request.url).searchParams.get('return') ?? '/';
+
+const orcid = await serverClient(cookie, Astro.request).authorizeUrl('orcid', ret).catch(() => null);
+const google = await serverClient(cookie, Astro.request).authorizeUrl('google', ret).catch(() => null);
+
+// Real OAuth URLs (https://...) bounce through the IdP and back to the API.
+// Local mock URLs (/auth/dev/mock-callback?...) need to hit the Astro proxy so
+// the callback's Set-Cookie lands on the web origin (4321), not the API (4000).
+function fullUrl(u: string | undefined): string | undefined {
+  if (!u) return undefined;
+  if (u.startsWith('http')) return u;
+  return `/api-proxy${u}`;
+}
+void apiBase;
+---
+<Base title="OpenXiv — sign in / sign up">
+  <main class="container-narrow">
+    <h1 class="title-serif">Sign in</h1>
+    <p class="muted" style="margin-bottom: 14px;">
+      Three ways in, all resolving to an AT-proto DID. Pick whichever you
+      trust most; you can link the others later from Settings → Identity.
+    </p>
+    <ul class="muted" style="margin: 0 0 22px; line-height: 1.55; font-size: 14px; padding-left: 18px;">
+      <li><strong>ORCID</strong> — recommended for researchers. ORCID gives you a stable identifier that travels with you across journals and venues.</li>
+      <li><strong>Google</strong> — quick. No institutional account required; an independent researcher gets the same surface as anyone else.</li>
+      <li><strong>Bluesky</strong> — native AT-proto identity. Your did:plc and your existing handle come along.</li>
+    </ul>
+    <div class="stack">
+      {orcid && (
+        <a class="btn btn-primary" href={fullUrl(orcid.url)}>Continue with ORCID</a>
+      )}
+      {google && (
+        <a class="btn" href={fullUrl(google.url)}>Continue with Google</a>
+      )}
+      <form id="bluesky-signin-form" class="bluesky-auth-form" data-redirect-after={ret}>
+        <input
+          class="input"
+          type="text"
+          name="handle"
+          placeholder="your-handle.bsky.social"
+          autocomplete="username"
+          spellcheck="false"
+          required
+        />
+        <button class="btn" type="submit">Continue with Bluesky</button>
+        <p class="muted bluesky-auth-error" data-bluesky-auth-error hidden></p>
+      </form>
+    </div>
+  </main>
+</Base>
+
+<script is:inline>
+  (function () {
+    var form = document.getElementById('bluesky-signin-form');
+    if (!form) return;
+    var error = form.querySelector('[data-bluesky-auth-error]');
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      if (error) {
+        error.hidden = true;
+        error.textContent = '';
+      }
+      var input = form.querySelector('input[name="handle"]');
+      var handle = input && input.value ? input.value.trim() : '';
+      if (!handle) return;
+      var button = form.querySelector('button[type="submit"]');
+      if (button) button.disabled = true;
+      fetch('/api-proxy/auth/bluesky/start', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          handle: handle,
+          redirect_after: form.getAttribute('data-redirect-after') || '/',
+          intent: 'signin',
+        }),
+      })
+        .then(function (res) {
+          return res.ok ? res.json() : res.text().then(function (text) { throw new Error(text || 'Bluesky sign-in failed'); });
+        })
+        .then(function (data) {
+          if (data && data.url) window.location.assign(data.url);
+        })
+        .catch(function (err) {
+          if (button) button.disabled = false;
+          if (error) {
+            error.textContent = err && err.message ? err.message : 'Bluesky sign-in failed';
+            error.hidden = false;
+          }
+        });
+    });
+  })();
+</script>
+
+<style>
+  .bluesky-auth-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: start;
+  }
+  .bluesky-auth-error {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 13px;
+  }
+  @media (max-width: 560px) {
+    .bluesky-auth-form {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema targetNamespace="http://www.openarchives.org/OAI/2.0/oai_dc/"
+           xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/"
+           xmlns:dc="http://purl.org/dc/elements/1.1/"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+
+  <xs:annotation>
+    <xs:documentation>
+      Import-free OAI-PMH oai_dc compatibility schema for validators that
+      reject nested schema imports. Dublin Core elements remain in the
+      http://purl.org/dc/elements/1.1/ namespace in the XML records; this
+      schema accepts that namespace with lax processing so BASE can validate
+      the OAI-PMH response without fetching a second XSD.
+    </xs:documentation>
+  </xs:annotation>
+
+  <xs:element name="dc" type="oai_dc:oai_dcType"/>
+
+  <xs:complexType name="oai_dcType">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:any namespace="http://purl.org/dc/elements/1.1/" processContents="lax"/>
+    </xs:choice>
+  </xs:complexType>
+
+</xs:schema>

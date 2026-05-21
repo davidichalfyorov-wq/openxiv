@@ -1,0 +1,99 @@
+{
+  "lexicon": 1,
+  "id": "app.openxiv.post",
+  "description": "A short scientific post or thread reply. Shape-compatible with app.bsky.feed.post so Bluesky clients can render it.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["text", "createdAt"],
+        "properties": {
+          "text": { "type": "string", "maxLength": 3000, "maxGraphemes": 3000 },
+          "facets": {
+            "type": "array",
+            "items": { "type": "ref", "ref": "#facet" }
+          },
+          "reply": { "type": "ref", "ref": "#replyRef" },
+          "embed": {
+            "type": "union",
+            "refs": ["#embedPaper", "#embedExternal"]
+          },
+          "tags": {
+            "type": "array",
+            "maxLength": 8,
+            "items": { "type": "string", "maxLength": 64 }
+          },
+          "langs": {
+            "type": "array",
+            "maxLength": 3,
+            "items": { "type": "string", "format": "language" }
+          },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    },
+    "replyRef": {
+      "type": "object",
+      "required": ["root", "parent"],
+      "properties": {
+        "root": { "type": "ref", "ref": "com.atproto.repo.strongRef" },
+        "parent": { "type": "ref", "ref": "com.atproto.repo.strongRef" }
+      }
+    },
+    "embedPaper": {
+      "type": "object",
+      "required": ["paperUri"],
+      "properties": {
+        "paperUri": { "type": "string", "format": "at-uri" }
+      }
+    },
+    "embedExternal": {
+      "type": "object",
+      "required": ["uri", "title"],
+      "properties": {
+        "uri": { "type": "string", "format": "uri" },
+        "title": { "type": "string", "maxLength": 300 },
+        "description": { "type": "string", "maxLength": 1000 }
+      }
+    },
+    "facet": {
+      "type": "object",
+      "required": ["index", "features"],
+      "properties": {
+        "index": { "type": "ref", "ref": "#byteSlice" },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "union",
+            "refs": ["#mention", "#link", "#tag"]
+          }
+        }
+      }
+    },
+    "byteSlice": {
+      "type": "object",
+      "required": ["byteStart", "byteEnd"],
+      "properties": {
+        "byteStart": { "type": "integer", "minimum": 0 },
+        "byteEnd": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "mention": {
+      "type": "object",
+      "required": ["did"],
+      "properties": { "did": { "type": "string", "format": "did" } }
+    },
+    "link": {
+      "type": "object",
+      "required": ["uri"],
+      "properties": { "uri": { "type": "string", "format": "uri" } }
+    },
+    "tag": {
+      "type": "object",
+      "required": ["tag"],
+      "properties": { "tag": { "type": "string", "maxLength": 64 } }
+    }
+  }
+}

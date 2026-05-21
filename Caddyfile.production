@@ -1,0 +1,83 @@
+# Production Caddy — runs inside the docker-compose stack on the Contabo VPS.
+# Auto Let's Encrypt cert for openxiv.net + www.openxiv.net via HTTP-01.
+
+{
+	email davidich.alfyorov@gmail.com
+	admin off
+}
+
+openxiv.net, www.openxiv.net {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=(), interest-cohort=()"
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; img-src 'self' data: https://openxiv.net https://www.openxiv.net https://cdn.bsky.app https://av-cdn.bsky.app https://static.ads-twitter.com; script-src 'self' 'unsafe-inline' https://static.ads-twitter.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; connect-src 'self' https://openxiv.net https://www.openxiv.net https://bsky.social https://*.bsky.network https://static.ads-twitter.com https://analytics.twitter.com; frame-src 'self'; upgrade-insecure-requests"
+		-Server
+	}
+
+	@blobs path /openxiv-blobs/*
+	handle @blobs {
+		reverse_proxy minio:9000
+	}
+
+	# Canonical API surface + infra paths. `/xrpc/*` is the AT-proto
+	# RPC namespace — labeler (`com.atproto.label.queryLabels`) plus
+	# any future XRPC service we expose live here. Caddy *must* forward
+	# this to the API; otherwise the labeler is invisible to Bluesky
+	# and the moderation lane is silently broken.
+	@api path /api/* /docs /docs/* /openapi.json /healthz /metrics /admin/health /oai-pmh /oai-pmh/* /u/*/did.json /.well-known/did.json /xrpc/*
+	handle @api {
+		reverse_proxy api:4000 {
+			header_up X-Forwarded-Proto https
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# OAuth callbacks bypass the prefix dance — IdP redirect URIs are
+	# pinned in each provider's dev console.
+	@oauth path /auth/orcid/callback /auth/google/callback /auth/bluesky/callback
+	handle @oauth {
+		reverse_proxy api:4000 {
+			header_up X-Forwarded-Proto https
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# Private web submission status page. Keep this ahead of the
+	# legacy /me/* API sunset route so clicking the header opens the
+	# Astro page instead of the deprecated JSON API body.
+	@me_submissions path /me/submissions /me/submissions/*
+	handle @me_submissions {
+		reverse_proxy web:4321 {
+			header_up X-Forwarded-Proto https
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# Legacy bare paths — sunset 2026-05-18. Routed through the API so
+	# the 410-Gone middleware can return a structured deprecation body.
+	@legacy_gone path /profiles /profiles/* /papers /papers/* /posts /posts/* /follows /follows/* /endorsements /endorsements/* /preregistrations /preregistrations/* /me /me/* /versions /versions/* /discussion /discussion/* /refusals /refusals/*
+	handle @legacy_gone {
+		reverse_proxy api:4000 {
+			header_up X-Forwarded-Proto https
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# Everything else → Astro SSR.
+	handle {
+		reverse_proxy web:4321 {
+			header_up X-Forwarded-Proto https
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

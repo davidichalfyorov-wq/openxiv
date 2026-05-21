@@ -1,0 +1,56 @@
+---
+import Base from '../layouts/Base.astro';
+import { SubmissionWizard } from '../components/SubmissionWizard';
+import { CATEGORIES } from '@openxiv/shared';
+import { serverClient } from '../lib/api';
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+let me: Awaited<ReturnType<ReturnType<typeof serverClient>['me']>> | null = null;
+try {
+  me = await serverClient(cookie, Astro.request).me();
+} catch (_err) {
+  me = { authenticated: false };
+}
+
+if (!me?.authenticated) {
+  return Astro.redirect('/auth/sign-in?return=/submit');
+}
+
+// Autofill the first author with the signed-in user's profile when the
+// wizard mounts. The user can still edit or remove the values. This
+// covers the common case where the submitter is one of the authors and
+// already has an ORCID linked to their OpenXiv account.
+const viewer = me.user
+  ? { displayName: me.user.displayName ?? '', orcid: me.user.orcid ?? null }
+  : null;
+---
+<Base title="OpenXiv — submit">
+  <main class="container-narrow">
+    <h1 class="title-serif">Submit a paper</h1>
+    <p class="muted" style="margin-bottom: 20px;">
+      Upload your <strong>LaTeX source</strong> (a single <code>.tex</code> or a
+      <code>.tar.gz</code> / <code>.zip</code> archive with <code>.tex</code>,
+      <code>.bib</code>, and figures). We compile with Tectonic, render HTML
+      with LaTeXML, and publish to your AT-proto record.
+    </p>
+    {/*
+      DISABLED 2026-05 PDF upload; revert when GROBID+Nougat pipeline
+      lands. Until then we need the LaTeX source to produce the HTML
+      view, math rendering, figure extraction, and the per-paper
+      marker that ties the published record back to its OpenXiv id.
+    */}
+    <p
+      class="muted"
+      style="margin: -8px 0 20px; padding: 8px 12px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 6px; font-size: 13px;"
+    >
+      PDF-only uploads are temporarily disabled. Re-enable once the GROBID +
+      Nougat fallback ships. See <a href="/policies/submission">submission policy</a>
+      for the full list of what we accept and what we refuse.
+    </p>
+    <SubmissionWizard
+      client:load
+      categories={CATEGORIES.map((c) => ({ code: c.code, name: c.name, group: c.group }))}
+      viewer={viewer}
+    />
+  </main>
+</Base>

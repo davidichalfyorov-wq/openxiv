@@ -1,0 +1,31 @@
+{
+  "name": "@openxiv/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev --port 4321 --host 0.0.0.0",
+    "start": "astro preview --port 4321 --host 0.0.0.0",
+    "build": "astro build",
+    "typecheck": "astro check",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@astrojs/node": "^9.0.0",
+    "@astrojs/react": "^4.1.2",
+    "@openxiv/shared": "workspace:*",
+    "astro": "^5.1.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.9",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "fast-check": "^3.23.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "license": "AGPL-3.0-or-later"
+}

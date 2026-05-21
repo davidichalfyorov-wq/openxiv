@@ -1,0 +1,491 @@
+---
+import Base from '../../../layouts/Base.astro';
+import KaTeXHead from '../../../components/KaTeXHead.astro';
+import { serverClient } from '../../../lib/api';
+import { postProcessPaperHtml } from '../../../lib/paper-html';
+
+const id = Astro.params.id;
+if (!id) return new Response('Missing id', { status: 400 });
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let paper: Awaited<ReturnType<typeof client.getPaper>> | null = null;
+try {
+  paper = await client.getPaper(id);
+} catch {
+  paper = null;
+}
+
+let figureImageUrls: string[] = [];
+let replaceSvgFigures = false;
+if (paper) {
+  try {
+    const r = await client.getPaperFigures(paper.id);
+    figureImageUrls = r.figures.map((figure) => figure.imageUrl);
+    replaceSvgFigures = r.extraction.status === 'complete' && r.extraction.source === 'pdf_grobid';
+  } catch {
+    figureImageUrls = [];
+    replaceSvgFigures = false;
+  }
+}
+
+let htmlBody: string | null = null;
+let htmlError: string | null = null;
+if (paper?.latestVersion?.htmlUrl) {
+  try {
+    const res = await fetch(paper.latestVersion.htmlUrl, {
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`HTML fetch ${res.status}`);
+    const raw = await res.text();
+    htmlBody = postProcessPaperHtml(raw, { figureImageUrls, replaceSvgFigures });
+  } catch (e) {
+    htmlError = (e as Error).message;
+  }
+}
+
+const publicBase = import.meta.env.PUBLIC_WEB_BASE ?? 'http://localhost:4321';
+const embedded = Astro.url.searchParams.get('embed') === '1';
+const canonical = paper
+  ? `${publicBase}/abs/${paper.openxivUrlId ?? paper.id}/read`
+  : `${publicBase}/`;
+const absUrl = paper
+  ? `${publicBase}/abs/${paper.openxivUrlId ?? paper.id}`
+  : `${publicBase}/`;
+---
+<Base
+  title={paper ? `${paper.title} — read` : 'Paper reader'}
+  description={paper?.abstract?.slice(0, 200) ?? 'OpenXiv reader'}
+>
+  <Fragment slot="head">
+    <link rel="canonical" href={canonical} />
+    <KaTeXHead />
+  </Fragment>
+
+  <main class={`reader-shell ${embedded ? 'reader-shell-embed' : ''}`}>
+    {!embedded && <header class="reader-head">
+      <p class="muted reader-trail">
+        <a href={absUrl}>← {paper?.title ?? id}</a>
+      </p>
+      {paper && (
+        <h1 class="title-serif reader-title">{paper.title}</h1>
+      )}
+      {paper && (
+        <p class="muted reader-byline">
+          {paper.authors.map((a) => a.displayName).join(', ') || '—'}
+          {paper.openxivId ? ` · ${paper.openxivId}` : ''}
+        </p>
+      )}
+      {paper?.latestVersion?.pdfUrl && (
+        <p class="muted reader-pdf-link">
+          Prefer PDF? <a href={paper.latestVersion.pdfUrl}>Download the PDF →</a>
+        </p>
+      )}
+    </header>}
+
+    {htmlBody === null && paper && (
+      <article class="card">
+        <p class="muted">
+          HTML rendering not available for this paper yet
+          {htmlError ? ` (${htmlError})` : ''}.
+          {paper.latestVersion?.pdfUrl && (
+            <> Open the <a href={paper.latestVersion.pdfUrl}>PDF</a> instead.</>
+          )}
+        </p>
+      </article>
+    )}
+
+    {htmlBody !== null && (
+      <article class="reader-body body-serif" set:html={htmlBody} />
+    )}
+
+    {!paper && (
+      <article class="card">
+        <h1>Paper not found</h1>
+        <p class="muted">No record matched <code>{id}</code>.</p>
+      </article>
+    )}
+  </main>
+
+  <div id="bib-hovercard" class="bib-hover" aria-hidden="true"></div>
+
+  <script is:inline>
+    (function () {
+      var card = document.getElementById('bib-hovercard');
+      if (!card) return;
+
+      function show(text, x, y) {
+        card.textContent = text;
+        card.style.left = x + 'px';
+        card.style.top = y + 'px';
+        card.style.opacity = '1';
+        card.style.pointerEvents = 'auto';
+      }
+      function hide() {
+        card.style.opacity = '0';
+        card.style.pointerEvents = 'none';
+      }
+
+      document.querySelectorAll('a[data-bib-ref]').forEach(function (a) {
+        a.addEventListener('mouseenter', function () {
+          var target = document.getElementById(a.getAttribute('data-bib-ref'));
+          if (!target) return;
+          var text = target.textContent || '';
+          var rect = a.getBoundingClientRect();
+          show(text.trim().slice(0, 400), rect.left + window.scrollX, rect.bottom + window.scrollY + 4);
+        });
+        a.addEventListener('mouseleave', hide);
+      });
+
+      // When the user lands with a #sec-3-p2 fragment, scroll into view and
+      // briefly highlight the paragraph so they can find their quote.
+      function highlightHash() {
+        var hash = location.hash;
+        if (!hash) return;
+        var el = document.getElementById(hash.slice(1));
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        el.classList.add('reader-highlight');
+        setTimeout(function () { el.classList.remove('reader-highlight'); }, 2400);
+      }
+      window.addEventListener('hashchange', highlightHash);
+      // Initial.
+      setTimeout(highlightHash, 100);
+    })();
+  </script>
+</Base>
+
+<style is:global>
+  html,
+  body {
+    overflow-x: hidden;
+  }
+  .reader-shell {
+    max-width: min(78ch, calc(100vw - 28px));
+    margin: 0 auto;
+    padding: 0 18px 60px;
+    overflow-x: clip;
+  }
+  .reader-shell-embed { max-width: 820px; padding: 16px 22px 36px; }
+  .reader-head { margin: 24px 0 30px; }
+  .reader-trail { font-size: 13px; margin: 0 0 6px; }
+  .reader-title { font-size: 28px; margin: 0; line-height: 1.25; }
+  .reader-byline { margin: 8px 0 4px; font-size: 14px; }
+  .reader-pdf-link { margin: 8px 0 0; font-size: 13px; }
+
+  .reader-body {
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--text-primary);
+    font-size: 17px;
+    line-height: 1.72;
+  }
+  .reader-body h1, .reader-body h2, .reader-body h3 {
+    font-family: var(--font-serif);
+    line-height: 1.2;
+    margin-top: 1.6em;
+    margin-bottom: 0.4em;
+  }
+  .reader-body h1 { font-size: 24px; }
+  .reader-body h2 { font-size: 19px; }
+  .reader-body h3 { font-size: 17px; }
+  .reader-body .ltx_title_paragraph {
+    display: block;
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.35;
+    margin: 1.1em 0 0.35em;
+    overflow-wrap: anywhere;
+  }
+  .reader-body p {
+    margin: 0.82em 0;
+    overflow-wrap: anywhere;
+    overflow-x: visible;
+  }
+  .reader-body p[id] { scroll-margin-top: 80px; }
+  .reader-body section { scroll-margin-top: 80px; }
+  .reader-body a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  .reader-body pre, .reader-body code {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px 6px;
+  }
+  .reader-body pre { max-width: 100%; padding: 12px; overflow-x: auto; }
+  .reader-body .paper-table-wrap { max-width: 100%; overflow-x: auto; margin: 1.2em 0; }
+  .reader-body table { display: block; width: 100%; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+  .reader-body th, .reader-body td { border: 1px solid var(--border); padding: 4px 8px; }
+  .reader-body figure {
+    max-width: 100%;
+    margin: 1.4em 0;
+    overflow-x: visible;
+  }
+  .reader-body img,
+  .reader-body svg { max-width: 100%; height: auto; overflow: hidden; }
+  .reader-body svg.ltx_picture,
+  .reader-body svg.ltx_picture foreignObject {
+    font-size: 8px;
+    line-height: 1.15;
+  }
+  .reader-body img[data-openxiv-inline-figure="1"] {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    max-height: min(70vh, 720px);
+    margin: 0 auto 10px;
+    object-fit: contain;
+  }
+  .reader-body .ltx_missing_image[data-openxiv-missing-figure="1"] {
+    display: none;
+  }
+  .reader-body figcaption { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
+  .reader-body math:not([display='block']),
+  .reader-body .katex:not(.katex-display),
+  .reader-body .paper-math:not(.paper-math-display) {
+    display: inline-block;
+    max-width: 100%;
+    overflow: visible;
+    vertical-align: middle;
+  }
+  .reader-body math[display='block'],
+  .reader-body .ltx_equation,
+  .reader-body .paper-math-display {
+    contain: paint;
+  }
+  .reader-body math[display='block'],
+  .reader-body .ltx_equation,
+  .reader-body .paper-math-display,
+  .reader-body .katex-display {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.2em 0;
+  }
+  /* openxiv-scrollbarless: keep overflow panning without visible nested bars. */
+  .reader-body,
+  .reader-body *,
+  .reader-body .openxiv-scrollbarless,
+  .reader-body .ltx_equation,
+  .reader-body .ltx_eqn_cell,
+  .reader-body .paper-math-display,
+  .reader-body .katex-display,
+  .reader-body .paper-table-wrap,
+  .reader-body pre {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .reader-body::-webkit-scrollbar,
+  .reader-body *::-webkit-scrollbar,
+  .reader-body .openxiv-scrollbarless::-webkit-scrollbar,
+  .reader-body .ltx_equation::-webkit-scrollbar,
+  .reader-body .ltx_eqn_cell::-webkit-scrollbar,
+  .reader-body .paper-math-display::-webkit-scrollbar,
+  .reader-body .katex-display::-webkit-scrollbar,
+  .reader-body .paper-table-wrap::-webkit-scrollbar,
+  .reader-body pre::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
+  .reader-body .katex-display > .katex { max-width: 100%; }
+  .reader-body .ltx_equation tbody,
+  .reader-body .ltx_equation tr,
+  .reader-body .ltx_equation td,
+  .reader-body .ltx_eqn_cell {
+    display: block;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .reader-body .katex { font-size: 1.02em; }
+  .reader-body .paper-ref-backlinks { margin-left: 0.35em; font-size: 0.82em; }
+  .reader-body .paper-references-accordion {
+    margin: 0.8em 0 0;
+    border-top: 1px solid var(--border);
+    padding-top: 0.6em;
+  }
+  .reader-body .paper-references-accordion summary {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 14px;
+  }
+  .reader-body .paper-citation-target-highlight {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    outline: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    outline-offset: 2px;
+  }
+  .reader-body .paper-figure-zoom-dialog,
+  .paper-figure-zoom-dialog {
+    max-width: min(94vw, 1280px);
+    max-height: 92vh;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-elev);
+    color: var(--text-primary);
+  }
+  .reader-body .paper-figure-zoom-dialog::backdrop,
+  .paper-figure-zoom-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.68);
+  }
+  .reader-body .paper-figure-zoom-closebar,
+  .paper-figure-zoom-closebar {
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px;
+  }
+  .reader-body .paper-figure-zoom-close,
+  .paper-figure-zoom-close {
+    min-width: 44px;
+    min-height: 44px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-base);
+    color: var(--text-primary);
+  }
+  .reader-body .paper-figure-zoom-stage,
+  .paper-figure-zoom-stage {
+    padding: 0 16px 16px;
+    max-width: 94vw;
+    max-height: calc(92vh - 60px);
+    overflow: auto;
+  }
+  .reader-body .paper-figure-zoom-stage img,
+  .reader-body .paper-figure-zoom-stage svg,
+  .paper-figure-zoom-stage img,
+  .paper-figure-zoom-stage svg {
+    display: block;
+    max-width: none;
+    width: auto;
+    height: auto;
+    max-height: calc(92vh - 90px);
+    margin: 0 auto;
+  }
+
+  @media (max-width: 768px) {
+    .reader-shell {
+      max-width: 100%;
+      padding-left: max(14px, env(safe-area-inset-left));
+      padding-right: max(14px, env(safe-area-inset-right));
+    }
+    .reader-body {
+      font-size: 16px;
+      line-height: 1.68;
+    }
+    .reader-body p {
+      overflow-x: visible;
+    }
+    .reader-body math:not([display='block']),
+    .reader-body .ltx_Math[display='inline'],
+    .reader-body .paper-math:not(.paper-math-display) {
+      display: inline-block;
+      max-width: 100%;
+      overflow: visible;
+      white-space: nowrap;
+    }
+    .reader-body .ltx_equation,
+    .reader-body .paper-math-display,
+    .reader-body .katex-display,
+    .reader-body .paper-table-wrap,
+    .reader-body pre {
+      max-width: 100%;
+      overflow-x: auto;
+    }
+    .reader-body figure {
+      overflow-x: visible;
+    }
+    .reader-body img,
+    .reader-body svg {
+      max-width: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      cursor: zoom-in;
+    }
+    .reader-body .paper-citation-link {
+      overflow-wrap: anywhere;
+    }
+    .reader-body .paper-ref-backlinks {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-left: 0.25em;
+      vertical-align: middle;
+    }
+    .reader-body .paper-ref-backlink,
+    .reader-body .paper-ref-backlink-chip {
+      min-width: 44px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-elev);
+      text-decoration: none;
+    }
+    .reader-body section,
+    .reader-body figure {
+      content-visibility: auto;
+      contain-intrinsic-size: 0 900px;
+    }
+    .reader-body section:has(.paper-references-accordion) {
+      content-visibility: visible;
+      contain-intrinsic-size: auto;
+    }
+  }
+
+  .reader-highlight {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    transition: background 1200ms ease-out;
+  }
+
+  .bib-hover {
+    position: absolute;
+    z-index: 999;
+    max-width: 360px;
+    padding: 10px 12px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+    font-size: 13px;
+    line-height: 1.45;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease-out;
+  }
+</style>
+
+{embedded && (
+  <style is:global>
+    .header-bar,
+    body > footer,
+    .skip-link {
+      display: none !important;
+    }
+    #main {
+      min-height: 100vh;
+    }
+  </style>
+)}

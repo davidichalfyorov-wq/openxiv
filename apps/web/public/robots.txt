@@ -1,0 +1,70 @@
+# OpenXiv robots.txt
+
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api-proxy/
+
+User-agent: Googlebot
+Allow: /p/
+Allow: /search
+Allow: /sitemap.xml
+Allow: /feed.atom
+Disallow: /admin
+Disallow: /api-proxy/
+
+User-agent: bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+User-agent: Googlebot-News
+Allow: /
+
+User-agent: ia_archiver
+Allow: /
+
+User-agent: archive.org_bot
+Allow: /
+
+User-agent: Internet-Archive-Bot
+Allow: /
+
+User-agent: SemanticScholarBot
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+Sitemap: https://openxiv.net/sitemap.xml

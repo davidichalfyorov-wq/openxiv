@@ -1,0 +1,127 @@
+---
+import Base from '../../layouts/Base.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+---
+<Base
+  title="Takedown &amp; withdrawal policy — OpenXiv"
+  description="OpenXiv withdrawal, retraction, and third-party takedown process. Records stay visible with a Withdrawn badge — never silently deleted."
+>
+  <main class="container-narrow">
+    <Breadcrumbs items={[{ name: 'Home', url: '/' }, { name: 'Policies', url: '/policies' }, { name: 'Takedown & withdrawal policy', url: '/policies/takedown' }]} />
+    <h1 class="title-serif">Takedown &amp; withdrawal policy</h1>
+    <p class="muted">Last updated 2026-05-18. Plain English.</p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">First principle: nothing disappears silently</h2>
+    <p class="body-serif">
+      Once a paper is published, its OpenXiv id and DOI resolve forever
+      — even after withdrawal, retraction, or a third-party complaint.
+      The record stays at the same URL, with the same identifier;
+      what changes is the content shown there. A "Withdrawn" badge,
+      a retraction notice, or a tombstone replaces the body of the
+      record, but the citation graph remains intact.
+    </p>
+    <p class="body-serif">
+      We make this commitment because citation graphs and the
+      historical record matter. Letting a paper vanish without a
+      trace makes science less reproducible.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Author withdrawal</h2>
+    <p class="body-serif">
+      You can request withdrawal of your own paper at any time:
+    </p>
+    <ul class="body-serif">
+      <li>Email <a href="mailto:davidich.alfyorov@gmail.com"><code>davidich.alfyorov@gmail.com</code></a>
+        from the address bound to your ORCID, or post a signed
+        request through your Bluesky DID.</li>
+      <li>Tell us the reason in one short paragraph (e.g. "found a
+        critical error in §3 after deposit"). This wording appears on
+        the public withdrawal badge.</li>
+      <li>The abstract page renders a prominent "Withdrawn" badge,
+        the reason, the withdrawal date. The PDF and source remain
+        downloadable for citation purposes.</li>
+    </ul>
+    <p class="body-serif">
+      If you'd rather correct than withdraw, submit a v2 — that's the
+      usual path for retractable mistakes (see
+      <a href="/policies/submission">submission policy</a>).
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Third-party takedown — copyright</h2>
+    <p class="body-serif">
+      If you believe a paper hosted on OpenXiv infringes your copyright,
+      submit a written DMCA notice through
+      <a href="/dmca">/dmca</a> (or email
+      <a href="mailto:davidich.alfyorov@gmail.com"><code>davidich.alfyorov@gmail.com</code></a>
+      with subject "DMCA").
+    </p>
+    <p class="body-serif">
+      A valid DMCA notice includes:
+    </p>
+    <ul class="body-serif">
+      <li>Identification of the copyrighted work claimed to be infringed.</li>
+      <li>Identification of the OpenXiv URL where the alleged
+        infringement lives.</li>
+      <li>Your contact information (address, phone, email).</li>
+      <li>A statement that you have a good-faith belief that the use
+        is not authorised.</li>
+      <li>A statement that the notice is accurate and that you are the
+        copyright owner or are authorised to act on the owner's behalf.</li>
+      <li>Your physical or electronic signature.</li>
+    </ul>
+    <p class="body-serif">
+      On receipt we replace the content with a takedown notice within
+      14 days, notify the author, and offer them the opportunity to
+      file a counter-notice. A successful counter-notice restores the
+      content; the complainant must then pursue the matter in court.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Plagiarism &amp; misconduct</h2>
+    <p class="body-serif">
+      When a credible report of plagiarism, fabrication, or misconduct
+      reaches the moderation queue:
+    </p>
+    <ul class="body-serif">
+      <li>A moderator reviews the evidence; the author is contacted
+        privately for response.</li>
+      <li>If confirmed, the outcome is <strong>public</strong>: either
+        a refusal packet that names the failure mode, or a retraction
+        notice that replaces the body of the record. The original
+        content remains downloadable via a "retracted version" link
+        so the historical record stays auditable.</li>
+      <li>The author may submit a revised version (which is treated as
+        a fresh submission, not a v2 of the retracted work).</li>
+    </ul>
+    <p class="body-serif">
+      We do not issue silent bans. Refusals and retractions are
+      published with their reasoning so the community can judge them.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Legal &amp; safety takedowns</h2>
+    <p class="body-serif">
+      For takedowns required by law (court order, GDPR right-to-erasure
+      claim against personal data appearing in a deposited paper, etc.),
+      we comply with the minimum scope of the order: the affected
+      content is removed, but the record itself remains with a
+      "Removed under legal order" notice. We publish a transparency
+      report annually listing the count of legal takedowns.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">What we don't do</h2>
+    <ul class="body-serif">
+      <li>We don't delete records to make the catalogue look cleaner.</li>
+      <li>We don't silently edit published content.</li>
+      <li>We don't issue retroactive author bans.</li>
+      <li>We don't accept anonymous misconduct reports — every
+        report must be signed (real name, ORCID, or an established
+        Bluesky identity).</li>
+    </ul>
+
+    <p class="muted" style="margin-top: 24px;">
+      Related: <a href="/policies/submission">Submission policy</a> ·
+      <a href="/policies/items">Content policy</a> ·
+      <a href="/dmca">DMCA intake</a> ·
+      <a href="/policies">All policies</a>.
+    </p>
+  </main>
+</Base>

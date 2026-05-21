@@ -1,0 +1,47 @@
+# OpenXiv
+
+> AT-Protocol preprint server. Preprints federate to Bluesky. Typed endorsements, Trust Passport, AI disclosure, three explainer tiers per paper. Open to independent researchers. ISSN 3120-9556, founded 2026-05-18, operated by David Alfyorov from Vilnius, Lithuania.
+
+OpenXiv publishes preprints as AT-proto records under the app.openxiv.* namespace. Authors sign in with ORCID or did:plc through Bluesky. There is no endorsement gate, no institutional-email check, and no affiliation filter. Submissions go through a pipeline that screens for unverified or hallucinated content; refused work gets a public refusal packet that names the failure mode, and the author can revise and resubmit. AI use is welcome at four declared levels (none, assistant, coauthor, primary); hidden AI use is a policy violation.
+
+## Core pages
+
+- [About OpenXiv](https://openxiv.net/about): mission, features, federation, AI policy.
+- [FAQ](https://openxiv.net/faq): 18 self-contained answers to common questions.
+- [Glossary](https://openxiv.net/glossary): 22 terms covering AT Protocol, identifiers, and OpenXiv concepts.
+- [Endorsement vocabulary](https://openxiv.net/vocabulary): the six typed endorsement verbs.
+- [How to submit](https://openxiv.net/docs/how-to-submit): step-by-step submission flow.
+- [Press kit](https://openxiv.net/press): fact sheet, founder bio, logos.
+- [Transparency report](https://openxiv.net/transparency): all moderation and legal actions.
+
+## Comparisons
+
+- [OpenXiv vs arXiv](https://openxiv.net/compare/arxiv)
+- [OpenXiv vs bioRxiv](https://openxiv.net/compare/biorxiv)
+- [OpenXiv vs SSRN](https://openxiv.net/compare/ssrn)
+- [OpenXiv vs Research Square](https://openxiv.net/compare/researchsquare)
+- [OpenXiv vs ChemRxiv](https://openxiv.net/compare/chemrxiv)
+
+## Policies
+
+- [Policies index](https://openxiv.net/policies)
+- [Code of conduct](https://openxiv.net/policies/code-of-conduct)
+- [Submission policy](https://openxiv.net/policies/submission)
+- [Metadata policy](https://openxiv.net/policies/metadata): metadata is CC0.
+- [Content / item policy](https://openxiv.net/policies/items): CC-BY-4.0 default.
+- [Preservation policy](https://openxiv.net/policies/preservation)
+- [Takedown & withdrawal policy](https://openxiv.net/policies/takedown)
+- [Jurisdictional restrictions](https://openxiv.net/policies/jurisdictional-restrictions)
+- [DORA commitment](https://openxiv.net/policies/dora-commitment)
+
+## Machine surfaces
+
+- [Sitemap](https://openxiv.net/sitemap.xml)
+- [Atom feed (all papers)](https://openxiv.net/feed.atom)
+- [OAI-PMH base](https://openxiv.net/oai-pmh)
+- [Full markdown corpus](https://openxiv.net/llms-full.txt)
+- [Identifier registration (ISSN portal)](https://portal.issn.org/resource/ISSN/3120-9556)
+
+## License
+
+Bibliographic metadata is CC0. Papers are licensed by their authors at submission (CC-BY-4.0 default). This llms.txt is CC0.

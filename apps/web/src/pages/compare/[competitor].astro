@@ -1,0 +1,176 @@
+---
+/**
+ * Dynamic comparison page: /compare/{arxiv,biorxiv,ssrn,researchsquare,chemrxiv}.
+ *
+ * Each route renders the same 10-row comparison table plus a short
+ * narrative blurb. The cells are designed to be quoted verbatim by an
+ * answer engine: every cell is a single factual claim, no marketing
+ * copy. The OpenXiv column is filled from the running site (terms,
+ * ISSN, code of conduct).
+ */
+import Base from '../../layouts/Base.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { COMPETITORS, COMPETITOR_SLUGS } from '../../lib/compare-data';
+import { safeJsonLd, ORG_ID } from '../../lib/jsonld';
+
+const slug = Astro.params.competitor;
+const profile = slug ? COMPETITORS[slug] : undefined;
+if (!profile) {
+  return new Response('Unknown competitor', { status: 404 });
+}
+const publicBase = 'https://openxiv.net';
+const canonical = `${publicBase}/compare/${profile.slug}`;
+const title = `OpenXiv vs ${profile.name}`;
+const description = `Side-by-side comparison of OpenXiv and ${profile.name}: endorsement gate, AI policy, federation, post-publication review, refusal model, ISSN, DOI status, license, source mandate, eligibility.`;
+
+// Article + ItemList JSON-LD. Article describes the page itself
+// (publisher OpenXiv), ItemList carries the rows so an answer engine
+// can lift a single dimension as a structured table row.
+const articleLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Article',
+  headline: title,
+  description,
+  url: canonical,
+  inLanguage: 'en',
+  publisher: { '@id': ORG_ID },
+  about: [
+    { '@type': 'Organization', name: 'OpenXiv', url: publicBase },
+    { '@type': 'Organization', name: profile.name, url: profile.url },
+  ],
+};
+
+const itemListLd = {
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: `${title}: comparison rows`,
+  url: canonical,
+  numberOfItems: profile.rows.length,
+  itemListElement: profile.rows.map((row, i) => ({
+    '@type': 'ListItem',
+    position: i + 1,
+    name: row.dimension,
+    description: `OpenXiv: ${row.openxiv}\n${profile.name}: ${row.competitor}`,
+  })),
+};
+
+const otherCompetitors = COMPETITOR_SLUGS.filter((s) => s !== profile.slug)
+  .map((s) => COMPETITORS[s])
+  .filter((c): c is NonNullable<typeof c> => Boolean(c));
+---
+<Base title={title} description={description}>
+  <Fragment slot="head">
+    <link rel="canonical" href={canonical} />
+    <script is:inline type="application/ld+json" set:html={safeJsonLd(articleLd)} />
+    <script is:inline type="application/ld+json" set:html={safeJsonLd(itemListLd)} />
+  </Fragment>
+
+  <main class="container-narrow">
+    <Breadcrumbs
+      items={[
+        { name: 'Home', url: '/' },
+        { name: 'Compare', url: '/compare/arxiv' },
+        { name: `vs ${profile.name}`, url: `/compare/${profile.slug}` },
+      ]}
+    />
+    <h1 class="title-serif">{title}</h1>
+    <p class="muted">
+      <strong>{profile.name}</strong> covers: {profile.fields}. Last
+      updated 2026-05-20.
+    </p>
+    <p class="body-serif">{profile.blurb}</p>
+
+    <div class="cmp-table-wrap">
+      <table class="cmp-table">
+        <thead>
+          <tr>
+            <th scope="col">Dimension</th>
+            <th scope="col">OpenXiv</th>
+            <th scope="col">{profile.name}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {profile.rows.map((row) => (
+            <tr>
+              <th scope="row">{row.dimension}</th>
+              <td>{row.openxiv}</td>
+              <td>{row.competitor}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    <p class="muted" style="margin-top: 24px;">
+      Source for the {profile.name} column: <a href={profile.url} rel="noopener noreferrer" target="_blank">{profile.url}</a>.
+      Where a field looks stale, the policy page on the competitor site is the authoritative source.
+    </p>
+
+    <section class="cmp-related">
+      <h2 class="title-serif" style="font-size: 18px;">Other comparisons</h2>
+      <ul class="cmp-related-list">
+        {otherCompetitors.map((c) => (
+          <li>
+            <a href={`/compare/${c.slug}`}>OpenXiv vs {c.name}</a>
+            <span class="muted"> ({c.fields.split(',')[0]})</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <p class="muted" style="margin-top: 24px;">
+      See also: <a href="/about">About OpenXiv</a>,
+      <a href="/faq">FAQ</a>,
+      <a href="/policies">Policies</a>,
+      <a href="/docs/how-to-submit">How to submit</a>.
+    </p>
+  </main>
+</Base>
+
+<style>
+  .cmp-table-wrap {
+    margin: 20px 0 0;
+    overflow-x: auto;
+  }
+  .cmp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .cmp-table th,
+  .cmp-table td {
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .cmp-table thead th {
+    background: var(--bg-elev);
+    font-family: var(--font-serif);
+    font-size: 14px;
+  }
+  .cmp-table tbody th {
+    background: var(--bg-elev);
+    font-family: var(--font-serif);
+    width: 22%;
+    min-width: 140px;
+  }
+  .cmp-table tbody td {
+    width: 39%;
+  }
+  .cmp-related {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .cmp-related-list {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 14px;
+  }
+</style>

@@ -1,0 +1,31 @@
+{
+  "lexicon": 1,
+  "id": "app.openxiv.endorsement",
+  "description": "Typed endorsement of a paper. The `verb` enumerates what the endorser actually did — from verifying derivations down to flagging a needed correction — so Trust Passport can weight verb diversity rather than counting raw 'likes'.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["paperUri", "verb", "createdAt"],
+        "properties": {
+          "paperUri": { "type": "string", "format": "at-uri" },
+          "verb": {
+            "type": "string",
+            "enum": [
+              "verified_derivation",
+              "checked_references",
+              "reproduced_result",
+              "useful_background",
+              "important_but_flawed",
+              "needs_correction"
+            ]
+          },
+          "note": { "type": "string", "maxLength": 500 },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    }
+  }
+}

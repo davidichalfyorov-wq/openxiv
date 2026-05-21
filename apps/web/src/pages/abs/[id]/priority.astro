@@ -1,0 +1,233 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { serverClient } from '../../../lib/api';
+import { createHash } from 'node:crypto';
+
+const id = Astro.params.id;
+if (!id) return new Response('Missing id', { status: 400 });
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let paper: Awaited<ReturnType<typeof client.getPaper>> | null = null;
+try {
+  paper = await client.getPaper(id);
+} catch {
+  paper = null;
+}
+
+let versions: Awaited<ReturnType<typeof client.listVersions>> | null = null;
+if (paper) {
+  try {
+    versions = await client.listVersions(paper.id);
+  } catch {
+    versions = null;
+  }
+}
+
+/**
+ * Claim hash — a stable digest of "what this paper claims" so a later
+ * appearance of the same idea elsewhere can be matched against this
+ * timestamp. We hash title + abstract + author list + license + primary
+ * category, normalized. NOT the file hash (which moves with edits) and not
+ * the full text (too volatile across revisions).
+ */
+function claimHash(p: NonNullable<typeof paper>): string {
+  const payload = [
+    'openxiv:claim:v1',
+    p.title.trim().normalize('NFC'),
+    (p.abstract ?? '').trim().normalize('NFC'),
+    p.authors
+      .map((a) => `${a.displayName}|${a.orcid ?? ''}`)
+      .sort()
+      .join(';'),
+    p.primaryCategory,
+    p.license,
+  ].join('\n');
+  return createHash('sha256').update(payload, 'utf8').digest('hex');
+}
+
+const claim = paper ? claimHash(paper) : null;
+const publicBase = import.meta.env.PUBLIC_WEB_BASE ?? 'http://localhost:4321';
+const canonical = paper
+  ? `${publicBase}/abs/${paper.openxivUrlId ?? paper.id}/priority`
+  : `${publicBase}/`;
+
+function fmt(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  return iso.replace('T', ' ').replace(/\.\d+Z$/, 'Z');
+}
+---
+<Base
+  title={paper ? `Priority — ${paper.title}` : 'Priority record'}
+  description={paper ? `Public priority record for OpenXiv submission ${paper.openxivId ?? paper.id}.` : 'OpenXiv priority record.'}
+>
+  <Fragment slot="head">
+    <link rel="canonical" href={canonical} />
+  </Fragment>
+  <main class="container">
+    <p class="muted priority-trail">
+      <a href={`/abs/${id}`}>← {paper?.title ?? id}</a>
+    </p>
+
+    {paper === null && (
+      <article class="card">
+        <h1 class="title-serif">Paper not found</h1>
+        <p class="muted">No priority record for <code>{id}</code>.</p>
+      </article>
+    )}
+
+    {paper !== null && (
+      <article class="card priority">
+        <header class="priority-head">
+          <h1 class="title-serif">Priority Passport</h1>
+          <p class="muted priority-blurb">
+            Public, machine-readable record of <em>when</em> this claim was
+            first registered with OpenXiv and <em>what</em> exactly was on
+            record at that moment.
+          </p>
+        </header>
+
+        <section class="priority-section">
+          <h2>Identity</h2>
+          <dl class="priority-facts">
+            <dt>OpenXiv id</dt>
+            <dd><code>{paper.openxivId ?? paper.id}</code></dd>
+            <dt>Title</dt>
+            <dd>{paper.title}</dd>
+            <dt>Authors</dt>
+            <dd>{paper.authors.map((a) => a.displayName).join(', ') || '—'}</dd>
+            <dt>Primary category</dt>
+            <dd><code>{paper.primaryCategory}</code></dd>
+            <dt>License</dt>
+            <dd>{paper.license}</dd>
+            {paper.doi && (
+              <>
+                <dt>DOI</dt>
+                <dd><code>{paper.doi}</code></dd>
+              </>
+            )}
+          </dl>
+        </section>
+
+        <section class="priority-section">
+          <h2>Timestamps</h2>
+          <dl class="priority-facts">
+            <dt>Submission registered</dt>
+            <dd><time datetime={paper.createdAt}>{fmt(paper.createdAt)}</time></dd>
+            <dt>First published</dt>
+            <dd><time datetime={paper.publishedAt ?? undefined}>{fmt(paper.publishedAt)}</time></dd>
+            <dt>Last updated</dt>
+            <dd><time datetime={paper.updatedAt}>{fmt(paper.updatedAt)}</time></dd>
+          </dl>
+        </section>
+
+        <section class="priority-section">
+          <h2>Cryptographic anchors</h2>
+          <p class="muted priority-section-blurb">
+            The claim hash digests the paper's authoritative metadata; the file
+            hash digests the deposited source. Together they let anyone verify
+            that the content registered on the timestamp above has not been
+            silently swapped since.
+          </p>
+          <dl class="priority-facts">
+            <dt>Claim hash (sha256)</dt>
+            <dd><code class="priority-hash">{claim}</code></dd>
+            {paper.latestVersion?.fileSha256 && (
+              <>
+                <dt>Source file hash (sha256)</dt>
+                <dd><code class="priority-hash">{paper.latestVersion.fileSha256}</code></dd>
+              </>
+            )}
+            {paper.uri && (
+              <>
+                <dt>AT-Proto record URI</dt>
+                <dd><code class="priority-hash">{paper.uri}</code></dd>
+              </>
+            )}
+          </dl>
+          <details class="priority-recipe">
+            <summary class="muted">How the claim hash is computed</summary>
+            <p class="muted">
+              <code>sha256( "openxiv:claim:v1\n" + title + "\n" + abstract + "\n" + authors_sorted + "\n" + primary_category + "\n" + license )</code>
+            </p>
+            <p class="muted">
+              Authors are joined as <code>displayName|orcid</code> entries
+              sorted lexicographically. All strings are NFC-normalized before
+              hashing.
+            </p>
+          </details>
+        </section>
+
+        {versions && versions.items.length > 0 && (
+          <section class="priority-section">
+            <h2>Version chain</h2>
+            <ol class="priority-versions">
+              {versions.items.slice().reverse().map((v) => (
+                <li class="priority-version">
+                  <span class="priority-vnum">v{v.versionNumber}</span>
+                  <time class="muted" datetime={v.createdAt}>{fmt(v.createdAt)}</time>
+                  {v.fileSha256 && <code class="muted priority-vsha">sha256:{v.fileSha256.slice(0, 16)}…</code>}
+                  {v.changelog?.becauseOf && (
+                    <span class="muted priority-vreason">({v.changelog.becauseOf})</span>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        <section class="priority-section">
+          <h2>What this is not</h2>
+          <p class="muted">
+            This Passport asserts <em>priority</em> (we have this on record
+            at this time) — not <em>correctness</em>, not peer review. The
+            Trust Passport on the abstract page tells a different, social
+            story about how transparent the work is.
+          </p>
+        </section>
+      </article>
+    )}
+  </main>
+</Base>
+
+<style>
+  .priority-trail { margin: 0 0 12px; font-size: 13px; }
+  .priority { padding: 22px 26px; max-width: 760px; }
+  .priority-head h1 { margin: 0 0 6px; }
+  .priority-blurb { margin: 0; font-size: 14px; max-width: 60ch; }
+
+  .priority-section { margin-top: 22px; }
+  .priority-section h2 { font-family: var(--font-serif); font-size: 15px; margin: 0 0 8px; }
+  .priority-section-blurb { margin: 0 0 8px; font-size: 13px; max-width: 60ch; }
+
+  .priority-facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 14px;
+    font-size: 13px;
+  }
+  .priority-facts dt { color: var(--text-secondary); }
+  .priority-facts dd { margin: 0; }
+  .priority-facts code { font-family: var(--font-mono); font-size: 12px; }
+  .priority-hash { word-break: break-all; display: inline-block; max-width: 100%; }
+
+  .priority-versions { padding-left: 0; margin: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .priority-version { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+  .priority-vnum {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .priority-vsha { font-family: var(--font-mono); font-size: 11px; }
+  .priority-vreason { font-size: 12px; }
+
+  .priority-recipe { margin-top: 10px; }
+  .priority-recipe p { font-size: 12px; line-height: 1.6; margin: 8px 0 0; }
+  .priority-recipe code { word-break: break-all; }
+</style>

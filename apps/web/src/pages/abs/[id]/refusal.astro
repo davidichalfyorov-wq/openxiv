@@ -1,0 +1,258 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { serverClient } from '../../../lib/api';
+
+const id = Astro.params.id;
+if (!id) {
+  return new Response('Missing id', { status: 400 });
+}
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let packet: Awaited<ReturnType<typeof client.refusal>> | null = null;
+let paper: Awaited<ReturnType<typeof client.getPaper>> | null = null;
+try {
+  packet = await client.refusal(id);
+} catch {
+  packet = null;
+}
+try {
+  paper = await client.getPaper(id);
+} catch {
+  paper = null;
+}
+
+const REASON_META: Record<string, { title: string; blurb: string }> = {
+  slop: {
+    title: 'Refused for unverified output',
+    blurb:
+      'The submission shows the hallmarks of unverified LLM output (hallucinated citations, fabricated math, internal contradictions). See the moderator note for the specific evidence.',
+  },
+  scope: {
+    title: 'Out of scope',
+    blurb:
+      'The submission is not science as OpenXiv defines it — opinion, marketing, manifesto, or domain not yet covered. The author may resubmit under a different venue.',
+  },
+  duplicate: {
+    title: 'Duplicate of an existing record',
+    blurb:
+      'The submission overlaps substantially with an already-indexed paper. Update or version the original instead.',
+  },
+  legal: {
+    title: 'Legal block',
+    blurb:
+      'The submission contains content we cannot host (copyright violation, defamation, regulated personal data). The author may resubmit a cleaned version.',
+  },
+  other: {
+    title: 'Other (see note)',
+    blurb:
+      'A specific concern outside the standard categories. Read the moderator note for detail.',
+  },
+};
+
+const reasonMeta = packet ? REASON_META[packet.reasonCategory] : null;
+---
+
+<Base
+  title={packet ? `Refusal packet — ${paper?.title ?? id}` : `No refusal — ${id}`}
+  description={packet
+    ? `Public refusal record for ${id} on OpenXiv.`
+    : `No refusal packet for ${id}.`}
+>
+  <main class="container">
+    <p class="muted refusal-trail">
+      <a href={`/abs/${id}`}>← {paper?.title ?? id}</a>
+    </p>
+
+    {
+      packet === null && (
+        <article class="card">
+          <h1 class="title-serif">No refusal packet</h1>
+          <p class="muted">This paper hasn't been refused — there's nothing to show here.</p>
+        </article>
+      )
+    }
+
+    {
+      packet !== null && (
+        <article class="card refusal">
+          <header class="refusal-head">
+            <span class={`refusal-category refusal-cat-${packet.reasonCategory}`}>
+              {packet.reasonCategory}
+            </span>
+            <h1 class="title-serif refusal-title">{reasonMeta?.title ?? 'Submission refused'}</h1>
+            <p class="muted refusal-blurb">{reasonMeta?.blurb}</p>
+            {packet.rescindedAt && (
+              <p class="muted refusal-rescinded">
+                This refusal was rescinded on {packet.rescindedAt.slice(0, 10)}.
+              </p>
+            )}
+          </header>
+
+          <dl class="refusal-facts">
+            <dt>Refused</dt>
+            <dd>{packet.issuedAt.slice(0, 10)}</dd>
+            <dt>By moderator/admin</dt>
+            <dd>
+              <code>{packet.issuedByDid}</code>
+            </dd>
+            <dt>Fixable</dt>
+            <dd>
+              {packet.fixable
+                ? 'Yes - author must submit a new version.'
+                : 'No - decision is final.'}
+            </dd>
+          </dl>
+
+          <section class="refusal-section">
+            <h2>Moderator note</h2>
+            <p class="body-serif refusal-note">{packet.moderatorNote}</p>
+          </section>
+
+          {packet.examples.length > 0 && (
+            <section class="refusal-section">
+              <h2>Specific issues</h2>
+              <ol class="refusal-examples">
+                {packet.examples.map((ex) => (
+                  <li class="refusal-example">
+                    {ex.section && <strong class="refusal-section-ref">{ex.section}</strong>}
+                    <p class="refusal-problem">{ex.problem}</p>
+                    {ex.suggestion && (
+                      <p class="muted refusal-suggestion">
+                        <strong>Suggestion:</strong> {ex.suggestion}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+
+          <section class="refusal-finality">
+            <h2>What happens next</h2>
+            {packet.fixable ? (
+              <p class="body-serif">
+                The author must submit a new version that addresses the moderator/admin comments
+                above. A new version with the same problems may be refused without further feedback.
+              </p>
+            ) : (
+              <p class="body-serif">
+                This decision is final. OpenXiv treats unfixable refusals as terminal - the author
+                may seek another venue, but the same paper will not be reconsidered here.
+              </p>
+            )}
+          </section>
+        </article>
+      )
+    }
+  </main>
+</Base>
+
+<style>
+  .refusal-trail {
+    margin: 0 0 12px;
+    font-size: 13px;
+  }
+  .refusal {
+    padding: 22px 24px;
+    max-width: 720px;
+  }
+  .refusal-head {
+    margin-bottom: 18px;
+  }
+  .refusal-category {
+    display: inline-block;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    color: var(--tone-caution);
+    background: color-mix(in srgb, var(--tone-caution) 12%, transparent);
+    margin-bottom: 6px;
+  }
+  .refusal-cat-legal {
+    color: var(--tone-warning);
+    background: color-mix(in srgb, var(--tone-warning) 12%, transparent);
+  }
+  .refusal-cat-other {
+    color: var(--text-secondary);
+    background: transparent;
+  }
+  .refusal-title {
+    margin: 0 0 6px;
+  }
+  .refusal-blurb {
+    margin: 0;
+    font-size: 14px;
+    max-width: 60ch;
+  }
+  .refusal-rescinded {
+    margin: 8px 0 0;
+    font-size: 13px;
+  }
+
+  .refusal-facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 14px;
+    margin: 14px 0 18px;
+    font-size: 13px;
+  }
+  .refusal-facts dt {
+    color: var(--text-secondary);
+  }
+  .refusal-facts dd {
+    margin: 0;
+  }
+  .refusal-facts code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .refusal-section {
+    margin-top: 18px;
+  }
+  .refusal-section h2 {
+    font-family: var(--font-serif);
+    font-size: 15px;
+    margin: 0 0 6px;
+  }
+  .refusal-note {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .refusal-examples {
+    padding-left: 20px;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .refusal-example {
+    font-size: 14px;
+  }
+  .refusal-section-ref {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .refusal-problem {
+    margin: 4px 0 4px;
+  }
+  .refusal-suggestion {
+    margin: 0;
+    font-size: 13px;
+  }
+
+  .refusal-finality {
+    margin-top: 22px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+</style>

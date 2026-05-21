@@ -1,0 +1,108 @@
+---
+import Base from '../../layouts/Base.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+---
+<Base
+  title="Policies — OpenXiv"
+  description="OpenXiv repository policies: code of conduct, submission, metadata, items, preservation, takedown, jurisdictional restrictions. Plain English."
+>
+  <main class="container-narrow">
+    <Breadcrumbs items={[{ name: 'Home', url: '/' }, { name: 'Policies', url: '/policies' }]} />
+    <h1 class="title-serif">Policies</h1>
+    <p class="muted">
+      Last updated 2026-05-19. The documents below describe how
+      OpenXiv handles submissions, metadata, content licensing,
+      long-term preservation, takedown and withdrawal requests,
+      and jurisdictional restrictions. Each one is written in
+      plain English, not legalese; when something is uncertain we
+      say so.
+    </p>
+
+    <section class="policy-list">
+      <article class="card policy-card">
+        <h2><a href="/policies/code-of-conduct">Code of conduct</a></h2>
+        <p class="body-serif">
+          Expectations for authors, endorsers, readers, and
+          moderators. Refuse the work, not the author. Public
+          refusal packets. Sanctions ladder from "return for
+          revision" to (rare) account suspension.
+        </p>
+      </article>
+
+      <article class="card policy-card">
+        <h2><a href="/policies/submission">Submission policy</a></h2>
+        <p class="body-serif">
+          Who may submit, what we accept, what we refuse, how AI use is
+          disclosed, how rejections work. PDF-only uploads are blocked;
+          source archives are required.
+        </p>
+      </article>
+
+      <article class="card policy-card">
+        <h2><a href="/policies/metadata">Metadata policy</a></h2>
+        <p class="body-serif">
+          Bibliographic data is CC0 — reuse freely. Lists the standards
+          we emit (Dublin Core via OAI-PMH, Crossref schema, Google
+          Scholar tags, JSON-LD). How corrections propagate.
+        </p>
+      </article>
+
+      <article class="card policy-card">
+        <h2><a href="/policies/items">Content / item policy</a></h2>
+        <p class="body-serif">
+          Authors retain copyright. Pick a license at submit (CC-BY-4.0
+          default). No paywalls, no embargoes. Modifications via new
+          versions, never silent edits.
+        </p>
+      </article>
+
+      <article class="card policy-card">
+        <h2><a href="/policies/preservation">Preservation policy</a></h2>
+        <p class="body-serif">
+          DOIs through Crossref, replicated storage, daily snapshots,
+          documented handoff plan to Zenodo. Honest about what a young
+          single-operator project can promise.
+        </p>
+      </article>
+
+      <article class="card policy-card">
+        <h2><a href="/policies/takedown">Takedown / withdrawal policy</a></h2>
+        <p class="body-serif">
+          Authors can withdraw; the record stays accessible with a
+          "Withdrawn" badge. Third-party copyright complaints use
+          DMCA. Misconduct outcomes are public.
+        </p>
+      </article>
+
+      <article class="card policy-card">
+        <h2><a href="/policies/jurisdictional-restrictions">Jurisdictional restrictions</a></h2>
+        <p class="body-serif">
+          If a national authority issues a binding legal demand,
+          we may geo-restrict an item for viewers in that
+          jurisdiction. Reactive, documented on the
+          <a href="/transparency">transparency report</a>,
+          reversible. Content is never deleted, the DOI continues
+          to resolve, and the author keeps all rights.
+        </p>
+      </article>
+    </section>
+
+    <p class="muted" style="margin-top: 32px;">
+      Related: <a href="/about">About</a> · <a href="/terms">Submission terms</a>
+      · <a href="/privacy">Privacy</a> · <a href="/dmca">DMCA intake</a>
+      · <a href="/transparency">Transparency report</a>.
+    </p>
+  </main>
+</Base>
+
+<style>
+  .policy-list { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+  .policy-card { padding: 16px 18px; }
+  .policy-card h2 {
+    margin: 0 0 6px;
+    font-family: var(--font-serif);
+    font-size: 18px;
+  }
+  .policy-card h2 a { color: inherit; }
+  .policy-card p { margin: 0; font-size: 14.5px; line-height: 1.5; }
+</style>

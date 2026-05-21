@@ -1,0 +1,209 @@
+---
+const apiBase =
+  (typeof process !== 'undefined' && process.env?.INTERNAL_API_BASE) ||
+  import.meta.env.PUBLIC_API_BASE ||
+  'http://localhost:4000';
+
+interface FeaturedItem {
+  id: string;
+  targetUri: string;
+  targetType: 'openxiv_paper' | 'external_paper';
+  reasonCardMd: string;
+  reasonCardHtml: string;
+  curatorDid: string;
+  position: number;
+  startedAt: string;
+  expiresAt: string | null;
+}
+
+let items: FeaturedItem[] = [];
+try {
+  const res = await fetch(`${apiBase}/api/featured`, { signal: AbortSignal.timeout(3000) });
+  if (res.ok) {
+    items = ((await res.json()) as { items: FeaturedItem[] }).items;
+  }
+} catch (_e) {
+  items = [];
+}
+
+function targetHref(item: FeaturedItem): string {
+  if (item.targetType === 'openxiv_paper') {
+    const id = item.targetUri.replace(/^openxiv:/, '');
+    return `/abs/${id}`;
+  }
+  const [src, ...rest] = item.targetUri.split(':');
+  if (!src || rest.length === 0) return '#';
+  return `/lens/${src}/${encodeURIComponent(rest.join(':'))}`;
+}
+---
+
+{items.length > 0 && (
+  <section class="featured" aria-labelledby="featured-heading">
+    <header class="featured-head">
+      <div>
+        <p class="featured-kicker">Curated</p>
+        <h2 id="featured-heading">Editor's picks</h2>
+      </div>
+      <p class="muted">A short list worth reading before browsing the catalog.</p>
+    </header>
+    <div class="featured-grid">
+      {items.slice(0, 3).map((item) => (
+        <article class={`featured-item ${item.targetType === 'external_paper' ? 'featured-item-external' : ''}`}>
+          <div class="featured-meta-row">
+            <span class="featured-kind">
+              {item.targetType === 'openxiv_paper' ? 'OpenXiv' : 'Lens'}
+            </span>
+            <span class="featured-curator">
+              {item.curatorDid.slice(0, 18)}...
+            </span>
+          </div>
+          <a href={targetHref(item)} class="featured-target">
+            {item.targetUri}
+          </a>
+          <div class="featured-reason" set:html={item.reasonCardHtml} />
+        </article>
+      ))}
+    </div>
+  </section>
+)}
+
+<style>
+  .featured {
+    margin: 4px 0 26px;
+    padding: 18px 0 20px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .featured-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 14px;
+  }
+
+  .featured-kicker {
+    margin: 0 0 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--brand-x);
+  }
+
+  .featured-head h2 {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: 22px;
+    line-height: 1.2;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .featured-head p {
+    margin: 0;
+    max-width: 330px;
+    text-align: right;
+  }
+
+  .featured-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+  }
+
+  .featured-item {
+    min-width: 0;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--brand-x);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    transition: border-color 120ms ease, background-color 120ms ease, transform 80ms ease;
+  }
+
+  .featured-item-external {
+    border-left-color: var(--accent);
+  }
+
+  .featured-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+  }
+
+  .featured-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .featured-kind {
+    flex: none;
+    padding: 2px 7px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    background: var(--bg-base);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .featured-curator {
+    min-width: 0;
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .featured-target {
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.45;
+    text-decoration: none;
+    color: var(--text-primary);
+    font-weight: 500;
+    overflow-wrap: anywhere;
+  }
+
+  .featured-target:hover {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .featured-reason {
+    font-family: var(--font-serif);
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+
+  .featured-reason :global(p) {
+    margin: 0;
+  }
+
+  @media (max-width: 720px) {
+    .featured-head {
+      display: grid;
+      gap: 6px;
+    }
+
+    .featured-head p {
+      max-width: none;
+      text-align: left;
+    }
+  }
+</style>

@@ -1,0 +1,53 @@
+---
+import Base from '../../layouts/Base.astro';
+import BriefBlock from '../../components/BriefBlock.astro';
+import type { BriefResponse } from '../../lib/brief';
+
+const date = Astro.params.date;
+if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  return new Response('Bad date', { status: 400 });
+}
+
+const apiBase =
+  (typeof process !== 'undefined' && process.env?.INTERNAL_API_BASE) ||
+  import.meta.env.PUBLIC_API_BASE ||
+  'http://localhost:4000';
+
+let data: BriefResponse | null = null;
+let notFound = false;
+try {
+  const res = await fetch(`${apiBase}/api/daily-brief/${encodeURIComponent(date)}`, {
+    signal: AbortSignal.timeout(5000),
+  });
+  if (res.ok) data = await res.json();
+  else if (res.status === 404) notFound = true;
+} catch {
+  notFound = true;
+}
+---
+<Base title={`Daily Science Brief — ${date}`} description={`OpenXiv snapshot for ${date}.`}>
+  <main class="container">
+    <header class="brief-head">
+      <p class="muted"><a href="/brief">← today's brief</a></p>
+      <h1 class="title-serif">Daily Science Brief — {date}</h1>
+      {data && (
+        <p class="muted">
+          Snapshot recorded at {new Date(data.generatedAt).toUTCString()}.
+        </p>
+      )}
+    </header>
+
+    {notFound && (
+      <article class="card">
+        <p class="muted">No snapshot was recorded for <code>{date}</code>. We started snapshotting on 2026-05-17 — anything earlier is unrecoverable.</p>
+      </article>
+    )}
+
+    {data && <BriefBlock items={data.items} />}
+  </main>
+</Base>
+
+<style>
+  .brief-head { margin-bottom: 20px; }
+  .brief-head h1 { margin: 6px 0; }
+</style>

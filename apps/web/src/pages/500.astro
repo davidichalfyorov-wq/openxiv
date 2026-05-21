@@ -1,0 +1,46 @@
+---
+import Base from '../layouts/Base.astro';
+
+Astro.response.status = 500;
+---
+
+<Base
+  title="Something went wrong — OpenXiv"
+  description="OpenXiv hit an unexpected error while rendering this page."
+>
+  <section class="container error-page">
+    <p class="eyebrow">500</p>
+    <h1 class="title-serif">Something went wrong</h1>
+    <p class="muted error-copy">
+      The request failed before the page could be rendered. Try again, or continue from search
+      while the error is being tracked.
+    </p>
+    <div class="row error-actions">
+      <a class="btn btn-primary" href="/search">Search OpenXiv</a>
+      <a class="btn" href="/">Go to feed</a>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .error-page {
+    min-height: 48vh;
+    display: grid;
+    align-content: center;
+    gap: 14px;
+    padding-block: 64px;
+  }
+  .error-page h1 {
+    margin: 0;
+    font-size: clamp(38px, 7vw, 72px);
+  }
+  .error-copy {
+    max-width: 620px;
+    font-size: 18px;
+    line-height: 1.6;
+  }
+  .error-actions {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+</style>

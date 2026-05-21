@@ -1,0 +1,61 @@
+{
+	# Email for Let's Encrypt notifications about cert expiry
+	email davidich.alfyorov@gmail.com
+
+	# Listen on standard ports — must be forwarded from router to this PC
+	# admin endpoint disabled for security
+	admin off
+}
+
+# Main web (Astro SSR) on openxiv.net
+openxiv.net, www.openxiv.net {
+	encode zstd gzip
+
+	# Security headers
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; img-src 'self' data: https://openxiv.net https://www.openxiv.net https://cdn.bsky.app https://av-cdn.bsky.app https://static.ads-twitter.com; script-src 'self' 'unsafe-inline' https://static.ads-twitter.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; connect-src 'self' https://openxiv.net https://www.openxiv.net https://bsky.social https://*.bsky.network https://static.ads-twitter.com https://analytics.twitter.com; frame-src 'self'; upgrade-insecure-requests"
+		-Server
+	}
+
+	# Proxy /api/* and /docs and openapi to API service
+	@api path /api/* /docs /docs/* /openapi.json /healthz /metrics /admin/health
+	handle @api {
+		uri strip_prefix /api
+		reverse_proxy localhost:4000 {
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {host}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# OAuth provider callbacks land at /auth/{provider}/callback on the web
+	# origin (cookies stay same-site) but the handler lives on the API.
+	@oauth_callback path /auth/orcid/callback /auth/google/callback /auth/bluesky/callback
+	handle @oauth_callback {
+		reverse_proxy localhost:4000 {
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {host}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# Everything else → Astro frontend
+	handle {
+		reverse_proxy localhost:4321 {
+			header_up X-Forwarded-Proto https
+			header_up X-Forwarded-Host {host}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	log {
+		output file C:/Users/youre/openxiv-caddy.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+}

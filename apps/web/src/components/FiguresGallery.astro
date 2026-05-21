@@ -1,0 +1,220 @@
+---
+/**
+ * Tier-2 figure gallery for the paper page. Renders extracted PNG
+ * thumbnails. Empty `figures` array is rendered as a quiet "no figures
+ * detected" placeholder rather than hidden — readers benefit from
+ * knowing GROBID ran and found nothing, vs the section just being
+ * absent (could be mistaken for a bug).
+ *
+ * Lightbox: pure <dialog>, opened by clicking a thumbnail. No JS frame-
+ * work, no client deps — Astro emits a tiny inline script that opens
+ * the dialog with the right image + caption. Keyboard close honoured
+ * via dialog's native ESC handling.
+ */
+export interface Figure {
+  idx: number;
+  imageUrl: string;
+  caption: string | null;
+  page: number | null;
+  type: 'figure' | 'table';
+}
+
+interface Props {
+  figures: Figure[];
+  extraction?: FigureExtraction;
+}
+
+type FigureExtraction =
+  | {
+      status: 'complete';
+      source: 'source_archive' | 'pdf_grobid';
+      reason:
+        | 'source_archive_figures'
+        | 'source_archive_no_figures'
+        | 'pdf_grobid_figures'
+        | 'pdf_grobid_no_figures';
+      figureCount: number;
+      completedAt: string;
+    }
+  | { status: 'pending' };
+
+const { figures, extraction = { status: 'pending' } } = Astro.props;
+const hasFigures = figures.length > 0;
+
+const emptyMessage =
+  extraction.status === 'complete'
+    ? extraction.source === 'source_archive'
+      ? 'No figures were found in this source package for the current version.'
+      : 'No figures were detected in the current PDF version.'
+    : 'Figure extraction has not completed for this version yet.';
+
+const emptyDetail =
+  extraction.status === 'complete'
+    ? 'This is a checked empty state, not a pending extraction.'
+    : 'When the extraction worker finishes, source figures or PDF crops will appear here if they exist.';
+
+function truncate(s: string, n: number): string {
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+}
+
+const figureLabel = (figure: Figure): string => {
+  const base = `Open ${figure.type} ${figure.idx + 1}`;
+  const page = figure.page ? `, page ${figure.page}` : '';
+  return figure.caption ? `${base}${page}: ${figure.caption}` : `${base}${page}`;
+};
+---
+
+<article class="card figures-card">
+  <header class="figures-head">
+    <h2>Figures</h2>
+    {hasFigures && (
+      <span class="muted">{figures.length} extracted</span>
+    )}
+  </header>
+
+  {!hasFigures ? (
+    <p class="muted figures-empty">
+      {emptyMessage} <span>{emptyDetail}</span>
+    </p>
+  ) : (
+    <div class="figures-grid">
+      {figures.map((f) => (
+        <button
+          type="button"
+          class="figure-thumb"
+          data-figure-idx={f.idx}
+          data-figure-url={f.imageUrl}
+          data-figure-caption={f.caption ?? ''}
+          data-figure-type={f.type}
+          data-figure-page={f.page ?? ''}
+          aria-label={figureLabel(f)}
+        >
+          <img
+            src={f.imageUrl}
+            alt=""
+            aria-hidden="true"
+            loading="lazy"
+            decoding="async"
+            width="320"
+            height="180"
+          />
+          {f.caption && (
+            <span class="figure-cap muted">{truncate(f.caption, 60)}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  )}
+</article>
+
+{hasFigures && (
+  <dialog id="figures-lightbox" class="figures-lightbox">
+    <form method="dialog" class="figures-lightbox-form">
+      <button type="submit" class="figures-lightbox-close" aria-label="Close">×</button>
+    </form>
+    <figure class="figures-lightbox-figure">
+      <img id="figures-lightbox-img" alt="" />
+      <figcaption id="figures-lightbox-cap" class="muted"></figcaption>
+    </figure>
+  </dialog>
+
+  <script is:inline>
+    (function () {
+      var dlg = document.getElementById('figures-lightbox');
+      var img = document.getElementById('figures-lightbox-img');
+      var cap = document.getElementById('figures-lightbox-cap');
+      if (!dlg || !img || !cap) return;
+      document.querySelectorAll('.figure-thumb').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var url = btn.getAttribute('data-figure-url');
+          var caption = btn.getAttribute('data-figure-caption') || '';
+          var type = btn.getAttribute('data-figure-type') || 'figure';
+          var page = btn.getAttribute('data-figure-page') || '';
+          img.src = url;
+          img.alt = caption;
+          var pageHint = page ? ' (page ' + page + ')' : '';
+          cap.textContent = caption
+            ? type.charAt(0).toUpperCase() + type.slice(1) + pageHint + ' — ' + caption
+            : type + pageHint;
+          if (typeof dlg.showModal === 'function') dlg.showModal();
+          else dlg.setAttribute('open', '');
+        });
+      });
+      dlg.addEventListener('click', function (e) {
+        if (e.target === dlg) dlg.close();
+      });
+    })();
+  </script>
+)}
+
+<style>
+  .figures-card { padding: 16px 18px; }
+  .figures-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 12px; }
+  .figures-head h2 { margin: 0; font-family: var(--font-serif); font-size: 16px; }
+  .figures-empty { margin: 0; font-size: 13px; }
+  .figures-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .figure-thumb {
+    appearance: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px;
+    background: var(--bg-base);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-align: left;
+    transition: border-color 120ms ease;
+  }
+  .figure-thumb:hover { border-color: var(--accent); }
+  .figure-thumb img {
+    width: 100%;
+    height: 150px;
+    object-fit: contain;
+    background: #fff;
+    border-radius: var(--radius-sm);
+  }
+  .figure-cap { font-size: 12px; line-height: 1.3; }
+  .figures-lightbox {
+    border: 0;
+    padding: 0;
+    max-width: 90vw;
+    max-height: 90vh;
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .figures-lightbox::backdrop { background: rgba(0,0,0,.6); }
+  .figures-lightbox-form { display: flex; justify-content: flex-end; padding: 6px 10px; }
+  .figures-lightbox-close {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: var(--text-primary);
+    font-size: 22px;
+    cursor: pointer;
+    padding: 0 6px;
+  }
+  .figures-lightbox-figure {
+    margin: 0;
+    padding: 0 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 80vw;
+    max-height: calc(90vh - 40px);
+  }
+  .figures-lightbox-figure img {
+    width: 100%;
+    object-fit: contain;
+    background: #fff;
+    border-radius: var(--radius-sm);
+    max-height: calc(90vh - 100px);
+  }
+  .figures-lightbox-figure figcaption { font-size: 13px; line-height: 1.4; }
+</style>

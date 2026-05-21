@@ -1,0 +1,74 @@
+---
+import Base from '../../layouts/Base.astro';
+import PaperRow from '../../components/PaperRow.astro';
+import PostRow from '../../components/PostRow.astro';
+import { serverClient } from '../../lib/api';
+
+const { did } = Astro.params;
+if (!did) {
+  return new Response('Missing did', { status: 400 });
+}
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let profile: Awaited<ReturnType<typeof client.profile>> | null = null;
+let items: Awaited<ReturnType<typeof client.profileStream>>['items'] = [];
+let error: string | null = null;
+try {
+  profile = await client.profile(did);
+  const stream = await client.profileStream(did, 50);
+  items = stream.items;
+} catch (err) {
+  error = (err as Error).message;
+}
+---
+<Base title={profile?.displayName ?? 'profile'}>
+  <main class="container">
+    {error && (
+      <div class="card" style="border-color: var(--tone-caution);">
+        <strong>Profile not available</strong>
+        <p class="muted" style="margin: 6px 0 0;">{error}</p>
+      </div>
+    )}
+
+    {profile && (
+      <header style="margin-bottom: 24px;">
+        <h1 class="title-serif" style="margin-bottom: 4px;">{profile.displayName}</h1>
+        <div class="muted">
+          {profile.handle && <span>@{profile.handle}</span>}
+          {profile.orcid && <span> · ORCID {profile.orcid}</span>}
+          <span> · {profile.role}</span>
+        </div>
+        {profile.bio && <p class="body-serif" style="margin-top: 12px;">{profile.bio}</p>}
+      </header>
+    )}
+
+    {items.length === 0 ? (
+      profile && <p class="muted">No public activity yet.</p>
+    ) : (
+      <div class="feed-container">
+        {items.map((item) => (
+          item.kind === 'paper'
+            ? <PaperRow paper={item.paper} />
+            : <PostRow post={item.post} createdAt={item.createdAt} />
+        ))}
+      </div>
+    )}
+  </main>
+</Base>
+
+<style>
+  .feed-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-sm);
+  }
+  .feed-container > :last-child {
+    border-bottom: none !important;
+  }
+</style>

@@ -1,0 +1,304 @@
+# OpenXiv: full corpus
+
+This file mirrors the public content pages of OpenXiv as markdown so a language model can ingest the full prose without rendering HTML. Updated 2026-05-20.
+
+OpenXiv is a preprint server built on the AT Protocol. ISSN 3120-9556, registered 2026-05-18. Operated by David Alfyorov from Vilnius, Lithuania. Bibliographic metadata is CC0; this file is CC0.
+
+---
+
+# About
+
+OpenXiv is a small AT-Protocol-native preprint server. Papers, threads, and explainers are real AT-proto records under the app.openxiv.* namespace; they live in your PDS, federate to Bluesky, and travel with you between clients. The point isn't a louder front page, it's that publishing here drops your work into the same stream where the people who read science actually spend their time.
+
+## What you actually get
+
+- Federation to Bluesky. Every accepted preprint becomes a Bluesky post with the abstract, an embed card, and a link back to the full HTML and PDF. Followers see new work in their normal social feed, not a separate notification silo.
+
+- Typed endorsements. Reviewers say what they actually did: verified derivation, reproduced result, checked references, useful background, important but flawed, needs correction. A pile of generic "likes" is easy to game; a single verified derivation from someone you trust isn't.
+
+- Trust Passport as a signed evidence vector. Every paper has separate lanes for transparency, identity, provenance, citations, math, integrity, and social review. Readers see green / yellow / red lane states with evidence items, open disputes, author responses, and verified external attestations. It is a longitudinal record, not a magic score.
+
+- Multi-tier summaries. Every paper has three audience slices: school (curious teenager), undergrad (you have seen the field), expert (you are in this subfield). Generated once at submission, edited by the author, persisted with the paper.
+
+- Provenance Timeline. Eight publicly-visible stages from upload through to Bluesky bridge, each with a timestamp where one exists, so a reader can see how the paper got from manuscript to indexed without guessing.
+
+## Who it's for
+
+Independent researchers without institutional backing are welcome on the same footing as everyone else. You sign in with ORCID (recommended for researchers) or did:plc through Bluesky; we do not require an endorser, we do not require an institutional email, we do not require an affiliation at all. If the work is real and you describe it honestly, it gets indexed.
+
+This is deliberate. The endorsement-gating pattern keeps a lot of well-meaning people out of the conversation for reasons that have little to do with their work. The cost of that gate is paid by every person whose field-shifting paper went unread because they hadn't yet been adopted by an established lab. We'd rather pay a different cost.
+
+You don't have to be in the field to read papers in the field. Each preprint comes with three explainer tiers (school, undergrad, expert) next to the original. AI generated and labelled as such. Read whichever fits, then drop into the original when you're ready.
+
+## AI use, honestly disclosed
+
+AI use is fine. Hidden AI use isn't. Every submission tags itself none, assistant, coauthor, or primary on a disclosure record that is part of the paper's AT-proto blob. Readers can filter on it, the Trust Passport surfaces it, and reviewers can call inconsistency.
+
+Unverified or hallucinated output is a different problem from AI use itself. It is work shaped like science but with hallucinated references, fabricated math, or "as-an-AI-language-model" boilerplate left in the body. We refuse it with a published refusal packet that names the failure mode and points at the evidence. Authors get to revise; we do not ban for a year.
+
+---
+
+# FAQ
+
+## What is OpenXiv?
+
+OpenXiv is a preprint server built on the AT Protocol. Authors upload preprints as AT-proto records under the app.openxiv.* namespace. Those records live in the author's PDS, federate to Bluesky as bridge posts, and stay queryable through OAI-PMH, JSON-LD, and a public API. The site is registered as a periodical with ISSN 3120-9556.
+
+## How is OpenXiv different from arXiv?
+
+Three differences. First, no endorsement gate: anyone can submit, including independent researchers without an institution. Second, the AI policy refuses individual unverified papers with a public refusal packet that names the failure mode, instead of banning authors for 12 months. Third, every paper is an AT-proto record that federates to Bluesky as a bridge post. arXiv remains the right venue for fields where it is the trusted standard, and cross-posting is fine.
+
+## Can I submit a preprint to OpenXiv without an institutional affiliation?
+
+Yes. OpenXiv is open to independent researchers, retired academics, citizen scientists, and graduate students between affiliations. There is no endorsement requirement, no institutional-email check, and no affiliation field that gates publication. You sign in with ORCID (recommended for researchers) or did:plc through Bluesky and submit. Affiliation is optional metadata, not a filter.
+
+## How does AT Protocol enable scholarly publishing?
+
+AT Protocol gives each author a personal data server (PDS) that holds signed records under reverse-DNS namespaces. OpenXiv defines lexicons under app.openxiv.* (paper, summary, disclosure, endorsement, refusal) and writes those records to the author's PDS at submission time. Federation to Bluesky and to the OpenXiv App View is a side effect of the protocol, not a separate integration.
+
+## How do AI disclosure levels work on OpenXiv?
+
+Every submission is tagged at one of four disclosure levels: none, assistant (AI helped with drafting, grammar, or search), coauthor (AI generated a substantive portion of the analysis or text), or primary (AI is the principal generative agent). The level is stored on an app.openxiv.disclosure record and mirrored into the JSON-LD payload. Hidden AI use is a policy violation. Correctly disclosed AI use is not.
+
+## Does OpenXiv peer review submissions?
+
+No. OpenXiv is a preprint server, not a peer-reviewed journal. We do screen submissions for unverified or hallucinated content and submission-terms compliance, and we refuse work that fails those checks with a public refusal packet. After publication, typed endorsements from other researchers work as distributed post-publication review.
+
+## What is the OpenXiv Trust Passport?
+
+The Trust Passport is a signed evidence vector attached to each paper. It tracks seven lanes (transparency, identity, provenance, citations, math, integrity, social review) and shows each lane as green, yellow, or red with the underlying evidence items, open disputes, author responses, and any external attestations.
+
+## What are OpenXiv explainer tiers?
+
+Every preprint is published alongside three audience-tiered summaries: school (a curious teenager can follow it), undergrad (you have seen the field), and expert (you are in this specific subfield). The tiers are generated at submission time by an LLM, labelled as AI-generated, persisted as app.openxiv.summary records, and editable by the author. The original PDF is unchanged.
+
+## Does OpenXiv have an ISSN?
+
+Yes. OpenXiv is registered with the ISSN International Centre under ISSN 3120-9556. The registration was issued on 2026-05-18 and the canonical portal record is at https://portal.issn.org/resource/ISSN/3120-9556.
+
+## Do OpenXiv papers get DOIs?
+
+DOI minting via Crossref is on the preservation roadmap. Until DOIs are issued, the OpenXiv identifier (an ARK-shaped string assigned at acceptance, for example 26.05.0001) is the citable persistent identifier.
+
+## How does OpenXiv federate to Bluesky?
+
+When a preprint is accepted, OpenXiv writes a bridge post to the author's Bluesky account containing the abstract, an embed card, and a link back to the OpenXiv abstract page. The post is a normal Bluesky record under app.bsky.feed.post.
+
+## Can independent researchers without affiliation publish on OpenXiv?
+
+Yes. OpenXiv does not require an endorser, an institutional email, an affiliation, or any third-party introduction. Independent researchers, retired academics, and citizen scientists submit through the same pipeline as everyone else.
+
+## What is an OpenXiv refusal packet?
+
+When OpenXiv refuses a submission, the refusal is a public document that names the specific failure mode, points at the evidence, and explains what would need to change before re-submission. Refusal packets are stored as app.openxiv.refusal records. We refuse the work, not the author.
+
+## AT Protocol vs ActivityPub: why did OpenXiv pick AT Proto?
+
+AT Protocol gives each user a portable signed-data PDS, account portability across providers, public-readable repositories, and a global jetstream for indexers. Together those let a preprint be both a personal record and a public artifact without dual-write. ActivityPub federates messages between servers but does not by itself give portable, signed, public-readable records of the kind a preprint registry needs.
+
+## What licenses can I publish under on OpenXiv?
+
+Authors retain copyright and pick a license at submission. The default is CC-BY-4.0. CC-BY-SA, CC0, and a small set of permissive software-style licenses for software-heavy preprints are also accepted.
+
+## How does OpenXiv handle retractions and corrections?
+
+OpenXiv does not delete papers, because deletion breaks citation graphs and looks like history-rewriting. Authors can retract a paper, which keeps the OpenXiv identifier resolving and shows a tombstone with the retraction reason. Corrections are published as new versions through the versions endpoint.
+
+## Where do OpenXiv files actually live?
+
+AT-proto records live in the author's PDS, on Bluesky's by default or on a self-hosted one. Binary artifacts live on OpenXiv's S3-compatible object storage, currently MinIO on the same VPS that runs the App View.
+
+## How do I cite a paper on OpenXiv?
+
+Every paper page exposes a Cite Panel with BibTeX, RIS, and APA / Chicago / MLA formats pre-filled. The canonical citation includes the author list, title, OpenXiv identifier, ISSN, and the date of latest version. HighWire and Dublin Core metadata are emitted so Zotero, Mendeley, and Google Scholar pick the citation up automatically.
+
+---
+
+# Glossary
+
+AT Protocol: the protocol behind Bluesky and OpenXiv. Gives each user a personal data server (PDS) holding signed records under reverse-DNS namespaces, supports account portability across providers, and publishes a public jetstream that indexers consume.
+
+did:plc: the default decentralized identifier method on AT Protocol. A did:plc string is a stable identifier for an account that can be rotated to a new key or moved between PDS providers without changing the underlying ID.
+
+did:web: an alternative DID method that anchors an identifier to a domain name. A user with did:web:example.org publishes their DID document at https://example.org/.well-known/did.json.
+
+PDS (Personal Data Server): an AT Protocol server that holds a single user (or a small group) and their signed records. Bluesky operates a default PDS; users may also self-host. OpenXiv writes app.openxiv.* records to the author's PDS.
+
+App View: an AT Protocol indexer that aggregates records from many PDS instances and exposes them through a public API. OpenXiv runs an App View that reads from the jetstream.
+
+Trust Passport: a signed evidence vector attached to each OpenXiv paper. Seven lanes: transparency, identity, provenance, citations, math, integrity, social review.
+
+Refusal packet: the public document OpenXiv publishes when refusing a submission. Names the failure mode, points at the evidence, explains what would have to change for re-submission. Stored as an app.openxiv.refusal record.
+
+Typed endorsement: an endorsement that carries a specific verb (verified derivation, reproduced result, checked references, useful background, important but flawed, needs correction) rather than a generic thumbs-up.
+
+Explainer tier: one of three audience-tiered summaries that accompany every OpenXiv paper. School, undergrad, expert. Generated by an LLM, labelled as AI-generated, editable by the author.
+
+AI disclosure level: one of four tags on every OpenXiv submission: none, assistant, coauthor, primary. Stored on an app.openxiv.disclosure record.
+
+Provenance timeline: an eight-stage public timeline showing how a paper got from upload to indexed.
+
+OAI-PMH: the Open Archives Initiative Protocol for Metadata Harvesting. OpenXiv exposes /oai-pmh with the standard verbs and oai_dc metadata.
+
+ScholarlyArticle: the schema.org type emitted in JSON-LD for every OpenXiv paper. Includes headline, identifier, abstract, author list with ORCID sameAs, license, datePublished, and a Periodical isPartOf block with the OpenXiv ISSN.
+
+Crossref: a DOI registration agency for scholarly content. OpenXiv plans to mint DOIs via Crossref as part of the preservation roadmap.
+
+ORCID: a persistent digital identifier for individual researchers. OpenXiv lets authors sign in with ORCID.
+
+Federation: on OpenXiv, federation means writing a record to the author's PDS and producing a Bluesky bridge post so the paper shows up in normal social feeds.
+
+JSON-LD: a linked-data serialization format. OpenXiv emits JSON-LD payloads (Organization, WebSite, ScholarlyArticle, FAQPage, DefinedTermSet, BreadcrumbList, ItemList, HowTo).
+
+ISSN: International Standard Serial Number, an eight-character identifier for serial publications. OpenXiv is registered under ISSN 3120-9556.
+
+DOI: Digital Object Identifier. OpenXiv's DOI minting roadmap goes through Crossref; for now the OpenXiv identifier is the persistent citable string.
+
+Jetstream: AT Protocol's firehose of newly created and modified records across the network, served as a websocket.
+
+Lexicon: AT Protocol's schema language. OpenXiv defines lexicons under app.openxiv.*: paper, summary, disclosure, endorsement, refusal, version.
+
+BullMQ: a Redis-backed job queue used by OpenXiv's API service to coordinate the submission pipeline.
+
+---
+
+# Endorsement vocabulary
+
+OpenXiv endorsements are typed verbs, not generic likes. Six terms in the controlled vocabulary:
+
+- Verified derivation: the endorser worked through the paper's central derivation, step by step, and the algebra and assumptions hold. Strongest mathematical endorsement on OpenXiv.
+
+- Reproduced result: the endorser independently re-ran the experiment, simulation, or numerical pipeline described in the paper and obtained results consistent with the reported claims, within the stated tolerance.
+
+- Checked references: the endorser audited the bibliography. Every cited source resolves, every quoted figure or claim attributed to a prior work matches what that prior work actually says, and there are no fabricated entries.
+
+- Useful background: the endorser found the paper a useful pedagogical or contextual reference, even if they did not verify every result.
+
+- Important but flawed: the endorser thinks the paper raises a question worth engaging with but contains identifiable defects (methodological, derivational, or evidentiary). The endorsement is expected to cite the defect.
+
+- Needs correction: the endorser has identified a concrete error and recommends the author publish a corrected version. The endorsement should name the specific section, equation, or claim that is wrong.
+
+---
+
+# Comparisons
+
+## OpenXiv vs arXiv
+
+arXiv is the original preprint server, founded in 1991 and operated by Cornell University. It is the trusted standard for several STEM fields. Differences with OpenXiv:
+
+- Endorsement gate. OpenXiv: none. arXiv: required in some categories.
+- AI policy. OpenXiv: four-level disclosure, per-paper refusal, no bans. arXiv: AI-related author bans as of 2026-05.
+- Federation. OpenXiv: AT Protocol with Bluesky bridges. arXiv: none.
+- Post-publication review. OpenXiv: typed endorsements and Trust Passport. arXiv: none native.
+- Refusal model. OpenXiv: public refusal packet. arXiv: private rejection.
+- ISSN. OpenXiv: 3120-9556. arXiv: none.
+- DOI. OpenXiv: roadmap. arXiv: DOIs via DataCite as of 2022.
+- Default license. OpenXiv: CC-BY-4.0. arXiv: author choice, including arXiv perpetual non-exclusive.
+- Source mandate. OpenXiv: source archive required. arXiv: TeX source preferred.
+- Eligibility. OpenXiv: independent researchers welcome. arXiv: endorsement-gated in some categories.
+
+## OpenXiv vs bioRxiv
+
+bioRxiv is the preprint server for the biological sciences, operated by Cold Spring Harbor Laboratory.
+
+- Endorsement gate. OpenXiv: none. bioRxiv: basic screening only.
+- AI policy. OpenXiv: four-level disclosure. bioRxiv: AI use must be declared.
+- Federation. OpenXiv: AT Protocol. bioRxiv: none.
+- Post-publication review. OpenXiv: typed endorsements. bioRxiv: free-text comment thread.
+- ISSN. OpenXiv: 3120-9556. bioRxiv: none.
+- DOI. OpenXiv: roadmap. bioRxiv: DOIs minted at posting (Crossref).
+- Default license. OpenXiv: CC-BY-4.0. bioRxiv: CC-BY-NC-ND default.
+- Source mandate. OpenXiv: required. bioRxiv: PDF or DOCX accepted.
+
+## OpenXiv vs SSRN
+
+SSRN is operated by Elsevier and hosts working papers across the social sciences, economics, law, and finance.
+
+- Endorsement gate. OpenXiv: none. SSRN: none for verified authors.
+- AI policy. OpenXiv: per-paper refusal. SSRN: disclosure required, editorial withdrawals.
+- Federation. OpenXiv: AT Protocol. SSRN: none.
+- Post-publication review. OpenXiv: typed endorsements. SSRN: only download counts.
+- Refusal model. OpenXiv: public refusal packet. SSRN: private editorial communication; recent withdrawals have been controversial.
+- ISSN. OpenXiv: 3120-9556. SSRN: none site-wide.
+- DOI. OpenXiv: roadmap. SSRN: DOIs minted on posting.
+
+## OpenXiv vs Research Square
+
+Research Square is a commercial preprint platform run by the parent of Springer Nature.
+
+- Endorsement gate. OpenXiv: none. Research Square: none, but identity verification and screening.
+- Federation. OpenXiv: AT Protocol. Research Square: none.
+- Post-publication review. OpenXiv: typed endorsements. Research Square: surfaces peer-review status from the linked Springer Nature journal.
+- ISSN. OpenXiv: 3120-9556. Research Square: none.
+- DOI. OpenXiv: roadmap. Research Square: DOIs minted on posting.
+- Default license. OpenXiv: CC-BY-4.0. Research Square: CC-BY-4.0 default.
+
+## OpenXiv vs ChemRxiv
+
+ChemRxiv is the chemistry preprint server, co-owned by major chemistry societies (ACS, RSC, GDCh, CCS, CSJ).
+
+- Endorsement gate. OpenXiv: none. ChemRxiv: moderation queue with subject review.
+- Federation. OpenXiv: AT Protocol. ChemRxiv: none.
+- Post-publication review. OpenXiv: typed endorsements. ChemRxiv: on-paper comments.
+- ISSN. OpenXiv: 3120-9556. ChemRxiv: none.
+- DOI. OpenXiv: roadmap. ChemRxiv: DOIs minted on posting.
+- Default license. OpenXiv: CC-BY-4.0. ChemRxiv: CC-BY-NC-ND default.
+
+---
+
+# Policies
+
+## Code of conduct
+
+OpenXiv expectations for authors, endorsers, readers, and moderators. Plain English.
+
+For authors: integrity (no fabrication, no hallucinated citations), verification (every claim checked before submission), conflicts of interest disclosed in the manuscript, versioning instead of silent edits, engagement with critique.
+
+AI use is welcome under clear rules: disclose the involvement level, name the models, verify every citation and number, never list AI as an author. Hidden AI use is the violation.
+
+Sanctions ladder: return for revision, public refusal packet, account suspension (rare). Refuse the work, not the author.
+
+## Submission policy
+
+Anyone with a verified identity may submit. Independent researchers without institutional backing are welcome on the same footing as people with institutional addresses.
+
+Required: a LaTeX source archive (.tar.gz), title, author list with ORCID where available, primary category and optional cross-listings, abstract, keywords, license, AI disclosure level.
+
+Refused: hallucinated citations, fabricated data, AI-language-model boilerplate, malware, content that violates the code of conduct.
+
+Refusal model: public refusal packet that names the failure mode, points at the evidence, explains what would need to change. Authors can revise and resubmit. No multi-month author bans.
+
+## Metadata policy
+
+Bibliographic metadata for every OpenXiv record is licensed CC0 1.0 (public domain). Standards emitted:
+
+- Dublin Core via OAI-PMH
+- Crossref schema (for the planned DOI feed)
+- Google Scholar HighWire tags
+- JSON-LD (Organization, WebSite, ScholarlyArticle, FAQPage, DefinedTermSet, ItemList, BreadcrumbList, HowTo)
+
+Corrections to metadata propagate through the same submission flow as new versions.
+
+## Content / item policy
+
+Authors retain copyright. License selection is required at submit. Default is CC-BY-4.0; CC-BY-SA, CC0, and a small set of permissive software licenses are accepted. No all-rights-reserved, no paywalls, no embargoes. Modifications are published as new versions; the original stays accessible with a "superseded" badge.
+
+## Preservation policy
+
+DOIs through Crossref (planned), replicated S3 storage with daily snapshots, documented handoff plan to Zenodo if OpenXiv ever stops operating. Honest about what a young single-operator project can promise: no guarantees beyond the documented operational practices.
+
+## Takedown and withdrawal policy
+
+Once a paper is published, its OpenXiv id and (planned) DOI resolve forever, even after withdrawal, retraction, or a third-party complaint. Authors can withdraw with a tombstone explaining the reason. Third-party copyright complaints go through DMCA. Misconduct outcomes are public.
+
+## Jurisdictional restrictions
+
+Reactive geo-restriction only when a binding legal demand requires it. Documented on the transparency report. Reversible. Content is never deleted; the identifier continues to resolve, and the author keeps all rights.
+
+## DORA commitment
+
+OpenXiv is a signatory of the Declaration on Research Assessment (DORA). Concrete operational principles: we do not use journal impact factors anywhere in the platform, we surface typed endorsement evidence rather than aggregated download or citation counts, we evaluate the work rather than the venue. Reviewed annually.
+
+---
+
+End of corpus. License: CC0.

@@ -1,0 +1,1098 @@
+---
+import Base from '../../layouts/Base.astro';
+import AiBadge from '../../components/AiBadge.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import KaTeXHead from '../../components/KaTeXHead.astro';
+import PaperMeta from '../../components/PaperMeta.astro';
+import TrustPanel from '../../components/TrustPanel.astro';
+import ProvenanceTimeline from '../../components/ProvenanceTimeline.astro';
+import EndorsementsPanel from '../../components/EndorsementsPanel.astro';
+import VersionChangelog from '../../components/VersionChangelog.astro';
+import AIUsageCard from '../../components/AIUsageCard.astro';
+import SeminarThread from '../../components/SeminarThread.astro';
+import CitePanel from '../../components/CitePanel.astro';
+import ShareToBluesky from '../../components/ShareToBluesky.astro';
+import FiguresGallery from '../../components/FiguresGallery.astro';
+import PaperPdfCard from '../../components/PaperPdfCard.astro';
+import { Explainer } from '../../components/Explainer';
+import { serverClient } from '../../lib/api';
+import { paperPublicUrl } from '../../lib/paper-url';
+import { formatPaperStatus } from '../../lib/paper-status';
+import { postProcessPaperHtml } from '../../lib/paper-html';
+
+const slug = Array.isArray(Astro.params.id) ? Astro.params.id.join('/') : Astro.params.id;
+if (!slug) {
+  return new Response('Missing id', { status: 400 });
+}
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let me: Awaited<ReturnType<typeof client.me>> | null = null;
+try {
+  me = await client.me();
+} catch (_err) {
+  me = { authenticated: false };
+}
+
+let paper: Awaited<ReturnType<typeof client.getPaper>> | null = null;
+let error: string | null = null;
+try {
+  paper = await client.getPaper(slug);
+} catch (err) {
+  error = (err as Error).message;
+}
+
+// Tier-2 figures — fetched in parallel-ish (after paper, since we need
+// the resolved id). Empty array is the no-figures state and is what we
+// render most often until the worker has run for this paper.
+let figures: Array<{
+  idx: number;
+  imageUrl: string;
+  caption: string | null;
+  page: number | null;
+  type: 'figure' | 'table';
+}> = [];
+let figureExtraction: Awaited<ReturnType<typeof client.getPaperFigures>>['extraction'] = {
+  status: 'pending',
+};
+if (paper) {
+  try {
+    const r = await client.getPaperFigures(paper.id);
+    figures = r.figures;
+    figureExtraction = r.extraction;
+  } catch {
+    figures = [];
+    figureExtraction = { status: 'pending' };
+  }
+}
+
+// Saga internals (per-stage booleans, raw error text) leak pipeline state that
+// only the submitter and moderators have reason to see. Public visitors see
+// the Provenance Timeline (positive, reader-facing) instead.
+const isOwnerOrMod =
+  Boolean(me?.authenticated) &&
+  Boolean(paper) &&
+  (me?.user?.did === paper?.submitterDid ||
+    me?.user?.role === 'moderator' ||
+    me?.user?.role === 'admin');
+const canRetry = isOwnerOrMod && Boolean(paper?.saga?.lastError);
+const paperTargetUri = paper?.uri ?? `openxiv:${paper?.openxivUrlId ?? paper?.id ?? slug}`;
+const publicPaperUrl = paper
+  ? paperPublicUrl(paper, import.meta.env.PUBLIC_WEB_BASE)
+  : Astro.url.toString();
+const paperUrlId = paper?.openxivUrlId ?? paper?.id ?? slug;
+const paperPath = paper ? `/abs/${paperUrlId}` : `/abs/${slug}`;
+const readerPath = `${paperPath}/read`;
+const passportPath = `${paperPath}/passport`;
+const passportJsonPath = `${paperPath}/passport.json`;
+// Stable, on-domain PDF URL. The API endpoint 302s to a presigned S3 URL,
+// so the path stays on openxiv.net (no third-party host leak) but the
+// reader pulls the file directly from object storage. Matches the
+// citation_pdf_url emitted by PaperMeta so Scholar + IndexNow + the hero
+// "Download" button all converge on a single canonical path.
+const stablePdfUrl = paper
+  ? `/api/papers/${encodeURIComponent(paperUrlId)}/pdf`
+  : '';
+
+// Human-readable labels for the saga-stage diagnostic card surfaced at
+// the bottom of the page (owner/mod only). Keys map 1:1 to PaperRecord
+// `saga.stages` booleans; if a new stage lands in the schema, add a row
+// here so the panel stays exhaustive.
+const SAGA_STAGE_LABELS = [
+  { key: 'paperPersisted', label: 'Manuscript filed and compiled' },
+  { key: 'paperApproved', label: 'Auto-approval check' },
+  { key: 'idAssigned', label: 'Permanent OpenXiv ID assigned' },
+  { key: 'pdsPaper', label: 'Federated to AT Protocol' },
+  { key: 'pdsSummaryDisclosure', label: 'Summaries and AI disclosure published' },
+  { key: 'blueskyBridge', label: 'Posted to the Bluesky feed' },
+] as const;
+const sagaStages = paper?.saga?.stages;
+const sagaSummary = (() => {
+  if (!sagaStages) return { done: 0, total: 0, label: '' };
+  const total = SAGA_STAGE_LABELS.length;
+  const done = SAGA_STAGE_LABELS.reduce(
+    (acc, row) => acc + (sagaStages[row.key as keyof typeof sagaStages] === true ? 1 : 0),
+    0,
+  );
+  return { done, total, label: `${done}/${total} stages complete` };
+})();
+
+let paperHtmlBody: string | null = null;
+let paperHtmlError: string | null = null;
+if (paper?.latestVersion?.htmlUrl) {
+  try {
+    const res = await fetch(paper.latestVersion.htmlUrl, {
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`HTML fetch ${res.status}`);
+    paperHtmlBody = postProcessPaperHtml(await res.text(), {
+      figureImageUrls: figures.map((figure) => figure.imageUrl),
+      replaceSvgFigures:
+        figureExtraction.status === 'complete' && figureExtraction.source === 'pdf_grobid',
+    });
+  } catch (err) {
+    paperHtmlError = (err as Error).message;
+  }
+}
+---
+
+<Base
+  title={paper?.title ?? 'paper'}
+  description={paper?.abstract?.slice(0, 200) ?? 'OpenXiv paper'}
+  canonicalUrl={false}
+>
+  <Fragment slot="head">
+    {paper && <PaperMeta paper={paper} firstFigureUrl={figures[0]?.imageUrl ?? null} />}
+    <KaTeXHead />
+  </Fragment>
+  <main class="container paper-page">
+    {
+      error && (
+        <div class="card" style="border-color: var(--tone-caution);">
+          <strong>Paper not found</strong>
+          <p class="muted" style="margin:6px 0 0;">
+            The id <code>{slug}</code> didn't resolve. Try <a href="/">home feed</a>.
+          </p>
+        </div>
+      )
+    }
+
+    {
+      paper && (
+        <>
+          <Breadcrumbs
+            items={[
+              { name: 'Home', url: '/' },
+              { name: paper.primaryCategory, url: `/topics/${paper.primaryCategory}` },
+              { name: paper.title, url: paperPath },
+            ]}
+          />
+          <div class="paper-head">
+            <div class="row" style="gap: 12px; flex-wrap: wrap; align-items: center;">
+              {/*
+              Primary category gets an accent badge (distinct visual weight);
+              each cross-listing renders as a neutral badge linking to its
+              own topic feed. Order: primary first, secondaries alphabetical
+              (server already returns them sorted). Crawlers can follow the
+              cross-listing links to discover sibling topic pages.
+            */}
+              <a
+                class="badge badge-tone-accent"
+                href={`/topics/${paper.primaryCategory}`}
+                title="Primary subject feed"
+              >
+                {paper.primaryCategory}
+              </a>
+              {(paper.crossListings ?? []).map((code) => (
+                <a
+                  class="badge badge-tone-neutral"
+                  href={`/topics/${code}`}
+                  title="Cross-listed subject feed"
+                >
+                  {code}
+                </a>
+              ))}
+              {paper.disclosure && <AiBadge level={paper.disclosure.level} />}
+              <span class="muted">{formatPaperStatus(paper.status)}</span>
+              {paper.openxivId && (
+                <code class="muted" style="font-size: 12px;">
+                  {paper.openxivId}
+                </code>
+              )}
+              {paper.doi && <span class="muted">doi:{paper.doi}</span>}
+              <span style="flex: 1;" />
+              <ShareToBluesky paper={paper} />
+            </div>
+            <h1 class="title-serif">{paper.title}</h1>
+            <div class="muted">
+              {paper.authors
+                .map((a) => (
+                  <span>
+                    {a.displayName}
+                    {a.affiliation ? ` (${a.affiliation})` : ''}
+                  </span>
+                ))
+                .reduce((acc, el, i) => (i === 0 ? [el] : [...acc, ', ', el]), [] as unknown[])}
+            </div>
+
+          </div>
+
+          {paper.latestVersion?.pdfUrl && (
+            <PaperPdfCard
+              paper={paper}
+              pdfUrl={stablePdfUrl}
+              readerPath={readerPath}
+              paperTargetUri={paperTargetUri}
+            />
+          )}
+
+          {paper.abstract && (
+            <article class="paper-abstract">
+              <h2>Abstract</h2>
+              <p class="body-serif">{paper.abstract}</p>
+            </article>
+          )}
+
+          <div class="paper-reader-shell">
+            <section class="paper-reader-main" aria-labelledby="html-reader-heading">
+              <div class="reader-toolbar">
+                <h2 id="html-reader-heading">Full text</h2>
+                <a
+                  class="btn btn-sm btn-ghost"
+                  href={readerPath}
+                  data-track-event="html_open"
+                  data-track-target={paperTargetUri}
+                >
+                  Reading view
+                </a>
+              </div>
+              {paperHtmlBody !== null ? (
+                <article
+                  class="reader-body paper-inline-html body-serif"
+                  set:html={paperHtmlBody}
+                />
+              ) : (
+                <div class="paper-reader-empty">
+                  <strong>HTML rendering is being prepared.</strong>
+                  {paperHtmlError && <p class="muted">Last reader attempt: {paperHtmlError}</p>}
+                  {paper.latestVersion?.pdfUrl && (
+                    <p class="muted">
+                      The source PDF is available in the side panel while conversion finishes.
+                    </p>
+                  )}
+                </div>
+              )}
+            </section>
+
+            <aside class="paper-reader-side stack" aria-label="Paper tools">
+              <Explainer client:visible paperId={paper.id} initial={paper.summaries} />
+              <AIUsageCard paper={paper} absUrl={publicPaperUrl} variant="compact" />
+              {paper.trust && <TrustPanel trust={paper.trust} paperPath={paperPath} />}
+              <EndorsementsPanel paper={paper} me={me} />
+
+              {paper.oneHardQuestion && (
+                <article class="card onehard-card">
+                  <h2 class="compact-heading">
+                    One hard question the author wants you to engage with
+                  </h2>
+                  <blockquote class="body-serif onehard-quote">{paper.oneHardQuestion}</blockquote>
+                </article>
+              )}
+
+              {paper.launchKit?.claimCards && paper.launchKit.claimCards.length > 0 && (
+                <article class="card claims-card">
+                  <h2 class="compact-heading">Claim cards</h2>
+                  <ul class="claim-list">
+                    {paper.launchKit.claimCards.map((c) => (
+                      <li>
+                        <strong>{c.headline}</strong>
+                        {c.supporting && <p class="muted">{c.supporting}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              )}
+            </aside>
+          </div>
+
+          <div class="paper-support-grid">
+            <section class="stack">
+              <FiguresGallery figures={figures} extraction={figureExtraction} />
+              {paper.provenance && <ProvenanceTimeline provenance={paper.provenance} />}
+              <VersionChangelog paper={paper} />
+            </section>
+
+            <section class="stack">
+              <SeminarThread paper={paper} me={me} />
+              <CitePanel paper={paper} absUrl={publicPaperUrl} />
+            </section>
+          </div>
+
+          <section class="paper-footer-actions" aria-label="Paper artifacts and export tools">
+            <div class="paper-footer-grid">
+              <article class="card artifact-card">
+                <h2 class="compact-heading">Article artifacts</h2>
+                <div class="artifact-links">
+                  <a class="btn btn-sm" href={passportPath}>
+                    Trust Passport
+                  </a>
+                  <a class="btn btn-sm btn-ghost" href={passportJsonPath}>
+                    JSON-LD
+                  </a>
+                  {paper.latestVersion?.htmlUrl && (
+                    <a class="btn btn-sm btn-ghost" href={paper.latestVersion.htmlUrl}>
+                      Raw HTML
+                    </a>
+                  )}
+                  {paper.latestVersion?.pdfUrl && (
+                    <a
+                      class="btn btn-sm btn-ghost"
+                      href={paper.latestVersion.pdfUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      data-track-event="pdf_download"
+                      data-track-target={paperTargetUri}
+                    >
+                      Source PDF
+                    </a>
+                  )}
+                </div>
+              </article>
+
+              <AIUsageCard paper={paper} absUrl={publicPaperUrl} variant="full" />
+            </div>
+          </section>
+
+          {isOwnerOrMod && paper.saga && sagaStages && (
+            <aside
+              class="paper-saga-card"
+              aria-label="Owner-only submission pipeline status"
+            >
+              <details>
+                <summary>
+                  <span class="paper-saga-summary-text">
+                    Submission pipeline status
+                    {paper.saga.lastError ? ' — needs attention' : ''}
+                  </span>
+                  <span class="paper-saga-summary-meta">{sagaSummary.label}</span>
+                </summary>
+                <p class="paper-saga-blurb">
+                  Visible only to authors and moderators. Each row tracks one stage
+                  of the post-submission pipeline. Re-running the publish saga is
+                  safe and idempotent.
+                </p>
+                <ul class="paper-saga-stage-list">
+                  {SAGA_STAGE_LABELS.map((row) => {
+                    const value = sagaStages[row.key as keyof typeof sagaStages];
+                    const failed =
+                      paper.saga?.lastErrorStage === row.key && value !== true;
+                    const state = value === true ? 'done' : failed ? 'failed' : 'pending';
+                    const icon = state === 'done' ? '✓' : state === 'failed' ? '✕' : '…';
+                    const label =
+                      state === 'done'
+                        ? 'Completed'
+                        : state === 'failed'
+                          ? 'Failed'
+                          : 'Pending';
+                    return (
+                      <li class={`paper-saga-stage paper-saga-stage-${state}`}>
+                        <span class="paper-saga-stage-icon" aria-hidden="true">
+                          {icon}
+                        </span>
+                        <span class="paper-saga-stage-label">{row.label}</span>
+                        <span class="paper-saga-stage-status">{label}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {paper.saga.lastError && (
+                  <pre class="paper-saga-error">{paper.saga.lastError}</pre>
+                )}
+                {canRetry && (
+                  <form
+                    method="post"
+                    action={`/api-proxy/papers/${paper.id}/retry`}
+                    class="paper-saga-retry"
+                  >
+                    <button class="btn btn-sm" type="submit">
+                      Retry from first failed stage
+                    </button>
+                  </form>
+                )}
+              </details>
+            </aside>
+          )}
+        </>
+      )
+    }
+  </main>
+</Base>
+{
+  paper && (
+    <script
+      is:inline
+      set:html={`
+      (function(){
+        if (typeof window.openxivTrack !== 'function') return;
+        window.openxivTrack(
+          'paper_view',
+          ${JSON.stringify(paperTargetUri)},
+          'openxiv_paper',
+          { route: '/abs' }
+        );
+        document.querySelectorAll('[data-track-event]').forEach(function (el) {
+          el.addEventListener('click', function () {
+            window.openxivTrack(
+              el.getAttribute('data-track-event'),
+              el.getAttribute('data-track-target') || ${JSON.stringify(paperTargetUri)},
+              'openxiv_paper',
+              { route: '/abs' }
+            );
+          });
+        });
+      })();
+    `}
+    />
+  )
+}
+
+<style>
+  .paper-head {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .paper-page {
+    max-width: min(1440px, calc(100vw - 40px));
+    overflow-x: clip;
+  }
+  .paper-abstract {
+    margin-top: 20px;
+    padding: 18px 0 8px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .paper-abstract h2,
+  .reader-toolbar h2,
+  .source-pdf-head h2,
+  .compact-heading {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: 16px;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+  .paper-abstract p {
+    margin: 10px 0 0;
+  }
+  .paper-reader-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(460px, 520px);
+    gap: 28px;
+    margin-top: 24px;
+    align-items: start;
+  }
+  .paper-reader-main {
+    min-width: 0;
+    overflow: visible;
+  }
+  .reader-toolbar,
+  .source-pdf-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .reader-toolbar {
+    padding: 0 0 12px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 18px;
+  }
+  .source-pdf-head {
+    padding: 0 0 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .paper-reader-empty {
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+  }
+  .paper-reader-empty p {
+    margin: 6px 0 0;
+  }
+  .paper-inline-html {
+    max-width: min(78ch, 100%);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .paper-reader-side {
+    min-width: 0;
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+    scrollbar-gutter: auto;
+  }
+  .paper-reader-side :global(.card) {
+    min-width: 0;
+  }
+  .source-pdf-card {
+    padding: 16px;
+    overflow: hidden;
+  }
+  .source-pdf-card > p {
+    margin: 10px 0 0;
+  }
+  .source-pdf-copy {
+    overflow-wrap: anywhere;
+  }
+  .artifact-card {
+    padding: clamp(14px, 1.5vw, 16px);
+    min-width: 0;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .artifact-links {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+  .artifact-links .btn {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .onehard-card {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .onehard-quote {
+    margin: 10px 0 0;
+    padding-left: 12px;
+    border-left: 3px solid var(--accent);
+    font-size: 15px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+  .claim-list {
+    list-style: none;
+    padding: 0;
+    margin: 12px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .claim-list li {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-base);
+  }
+  .claim-list strong {
+    display: block;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+  }
+  .claim-list p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+  .paper-support-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+    gap: 24px;
+    margin-top: 24px;
+  }
+  .paper-footer-actions {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+  .paper-footer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 1180px) {
+    .paper-reader-shell,
+    .paper-support-grid {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+  }
+</style>
+
+<style is:global>
+  html,
+  body {
+    overflow-x: hidden;
+  }
+  .paper-inline-html {
+    font-size: 17px;
+    line-height: 1.72;
+    color: var(--text-primary);
+  }
+  .paper-inline-html h1,
+  .paper-inline-html h2,
+  .paper-inline-html h3 {
+    font-family: var(--font-serif);
+    line-height: 1.22;
+    margin-top: 1.6em;
+    margin-bottom: 0.42em;
+  }
+  .paper-inline-html h1 {
+    font-size: 24px;
+  }
+  .paper-inline-html h2 {
+    font-size: 20px;
+  }
+  .paper-inline-html h3 {
+    font-size: 17px;
+  }
+  .paper-inline-html .ltx_title_paragraph {
+    display: block;
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.35;
+    margin: 1.1em 0 0.35em;
+    overflow-wrap: anywhere;
+  }
+  .paper-inline-html p {
+    margin: 0.82em 0;
+    overflow-wrap: anywhere;
+    overflow-x: visible;
+  }
+  .paper-inline-html p[id],
+  .paper-inline-html section {
+    scroll-margin-top: 80px;
+  }
+  .paper-inline-html a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  .paper-inline-html pre,
+  .paper-inline-html code {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px 6px;
+  }
+  .paper-inline-html pre {
+    padding: 12px;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .paper-inline-html .paper-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 1.2em 0;
+  }
+  .paper-inline-html table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+  }
+  .paper-inline-html th,
+  .paper-inline-html td {
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+  }
+  .paper-inline-html figure {
+    margin: 1.4em 0;
+    max-width: 100%;
+    overflow-x: visible;
+  }
+  .paper-inline-html img,
+  .paper-inline-html svg {
+    max-width: 100%;
+    height: auto;
+    overflow: hidden;
+  }
+  .paper-inline-html svg.ltx_picture,
+  .paper-inline-html svg.ltx_picture foreignObject {
+    font-size: 8px;
+    line-height: 1.15;
+  }
+  .paper-inline-html img[data-openxiv-inline-figure="1"] {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    max-height: min(70vh, 720px);
+    margin: 0 auto 10px;
+    object-fit: contain;
+  }
+  .paper-inline-html .ltx_missing_image[data-openxiv-missing-figure="1"] {
+    display: none;
+  }
+  /*
+   * Math layout. There are two visually distinct cases the LaTeXML/KaTeX
+   * pipeline produces, and we must treat them differently or inline
+   * equations will jump onto their own line — that was the original
+   * "paragraph flicker after reload" regression.
+   *
+   *   1. Inline math — bare <math display="inline">, or the .paper-math
+   *      span the KaTeX shim wraps it in. Stays in the paragraph.
+   *   2. Display math — .ltx_equation, .paper-math-display, .katex-display,
+   *      or <math display="block">. Becomes a full-width block.
+   *
+   * The critical invariant: .paper-math WITHOUT the -display suffix must
+   * never get `display: block`. Even one stray block rule on this class
+   * fragments every paragraph that contains inline math, on both desktop
+   * and mobile.
+   */
+  .paper-inline-html math:not([display='block']),
+  .paper-inline-html .katex:not(.katex-display),
+  .paper-inline-html .paper-math:not(.paper-math-display) {
+    display: inline-block;
+    max-width: 100%;
+    overflow: visible;
+    vertical-align: middle;
+  }
+  .paper-inline-html math[display='block'],
+  .paper-inline-html .ltx_equation,
+  .paper-inline-html .paper-math-display {
+    contain: paint;
+  }
+  .paper-inline-html math[display='block'],
+  .paper-inline-html .ltx_equation,
+  .paper-inline-html .paper-math-display,
+  .paper-inline-html .katex-display {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.2em 0;
+  }
+  /* openxiv-scrollbarless: keep overflow panning without visible nested bars. */
+  .paper-inline-html,
+  .paper-inline-html *,
+  .paper-inline-html .openxiv-scrollbarless,
+  .paper-inline-html .ltx_equation,
+  .paper-inline-html .ltx_eqn_cell,
+  .paper-inline-html .paper-math-display,
+  .paper-inline-html .katex-display,
+  .paper-inline-html .paper-table-wrap,
+  .paper-inline-html pre,
+  .paper-saga-error {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .paper-inline-html::-webkit-scrollbar,
+  .paper-inline-html *::-webkit-scrollbar,
+  .paper-inline-html .openxiv-scrollbarless::-webkit-scrollbar,
+  .paper-inline-html .ltx_equation::-webkit-scrollbar,
+  .paper-inline-html .ltx_eqn_cell::-webkit-scrollbar,
+  .paper-inline-html .paper-math-display::-webkit-scrollbar,
+  .paper-inline-html .katex-display::-webkit-scrollbar,
+  .paper-inline-html .paper-table-wrap::-webkit-scrollbar,
+  .paper-inline-html pre::-webkit-scrollbar,
+  .paper-saga-error::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
+  .paper-inline-html .katex-display > .katex {
+    max-width: 100%;
+  }
+  .paper-inline-html .ltx_equation tbody,
+  .paper-inline-html .ltx_equation tr,
+  .paper-inline-html .ltx_equation td,
+  .paper-inline-html .ltx_eqn_cell {
+    display: block;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .paper-inline-html .katex {
+    font-size: 1.02em;
+  }
+  .paper-inline-html .paper-ref-backlinks {
+    margin-left: 0.35em;
+    font-size: 0.82em;
+  }
+  .paper-inline-html .paper-references-accordion {
+    margin: 0.8em 0 0;
+    border-top: 1px solid var(--border);
+    padding-top: 0.6em;
+  }
+  .paper-inline-html .paper-references-accordion summary {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 14px;
+  }
+  .paper-inline-html .paper-citation-target-highlight {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    outline: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    outline-offset: 2px;
+  }
+  .paper-inline-html .paper-figure-zoom-dialog,
+  .paper-figure-zoom-dialog {
+    max-width: min(94vw, 1280px);
+    max-height: 92vh;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-elev);
+    color: var(--text-primary);
+  }
+  .paper-inline-html .paper-figure-zoom-dialog::backdrop,
+  .paper-figure-zoom-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.68);
+  }
+  .paper-inline-html .paper-figure-zoom-closebar,
+  .paper-figure-zoom-closebar {
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px;
+  }
+  .paper-inline-html .paper-figure-zoom-close,
+  .paper-figure-zoom-close {
+    min-width: 44px;
+    min-height: 44px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-base);
+    color: var(--text-primary);
+  }
+  .paper-inline-html .paper-figure-zoom-stage,
+  .paper-figure-zoom-stage {
+    padding: 0 16px 16px;
+    max-width: 94vw;
+    max-height: calc(92vh - 60px);
+    overflow: auto;
+  }
+  .paper-inline-html .paper-figure-zoom-stage img,
+  .paper-inline-html .paper-figure-zoom-stage svg,
+  .paper-figure-zoom-stage img,
+  .paper-figure-zoom-stage svg {
+    display: block;
+    max-width: none;
+    width: auto;
+    height: auto;
+    max-height: calc(92vh - 90px);
+    margin: 0 auto;
+  }
+  .paper-inline-html figcaption {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 6px;
+  }
+  @media (max-width: 768px) {
+    .paper-page {
+      max-width: 100%;
+      padding-left: max(14px, env(safe-area-inset-left));
+      padding-right: max(14px, env(safe-area-inset-right));
+    }
+    .paper-reader-shell,
+    .paper-support-grid {
+      grid-template-columns: 1fr;
+    }
+    .paper-reader-side {
+      position: static;
+    }
+    .paper-inline-html {
+      font-size: 16px;
+      line-height: 1.68;
+    }
+    .paper-inline-html p {
+      overflow-x: visible;
+    }
+    .paper-inline-html math:not([display='block']),
+    .paper-inline-html .ltx_Math[display='inline'],
+    .paper-inline-html .paper-math:not(.paper-math-display) {
+      display: inline-block;
+      max-width: 100%;
+      overflow: visible;
+      white-space: nowrap;
+    }
+    .paper-inline-html .ltx_equation,
+    .paper-inline-html .paper-math-display,
+    .paper-inline-html .katex-display,
+    .paper-inline-html .paper-table-wrap,
+    .paper-inline-html pre {
+      max-width: 100%;
+      overflow-x: auto;
+    }
+    .paper-inline-html figure {
+      overflow-x: visible;
+    }
+    .paper-inline-html img,
+    .paper-inline-html svg {
+      max-width: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      cursor: zoom-in;
+    }
+    .paper-inline-html .paper-citation-link {
+      overflow-wrap: anywhere;
+    }
+    .paper-inline-html .paper-ref-backlinks {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-left: 0.25em;
+      vertical-align: middle;
+    }
+    .paper-inline-html .paper-ref-backlink,
+    .paper-inline-html .paper-ref-backlink-chip {
+      min-width: 44px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-elev);
+      text-decoration: none;
+    }
+    .paper-inline-html section,
+    .paper-inline-html figure,
+    .paper-reader-side > .card,
+    .paper-support-grid > section > .card,
+    .paper-footer-actions {
+      content-visibility: auto;
+      contain-intrinsic-size: 0 900px;
+    }
+    .paper-inline-html section:has(.paper-references-accordion) {
+      content-visibility: visible;
+      contain-intrinsic-size: auto;
+    }
+    .paper-saga-summary-meta {
+      align-self: flex-start;
+    }
+  }
+
+  /*
+   * Owner-only submission pipeline panel — lives at the bottom of the
+   * paper page (intentionally low visual weight). Collapsed by default
+   * via <details>; the summary line gives a 4/6-style progress
+   * indicator so the author can see at a glance whether anything is
+   * still missing without expanding the panel.
+   */
+  .paper-saga-card {
+    margin-top: 28px;
+    padding: 0;
+  }
+  .paper-saga-card details {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elev);
+    padding: 0;
+  }
+  .paper-saga-card summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+    padding: 12px 14px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    list-style: none;
+  }
+  .paper-saga-card summary::-webkit-details-marker {
+    display: none;
+  }
+  .paper-saga-card[open] summary,
+  .paper-saga-card details[open] > summary {
+    border-bottom: 1px solid var(--border);
+  }
+  .paper-saga-summary-text {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .paper-saga-summary-meta {
+    color: var(--text-tertiary);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .paper-saga-blurb {
+    margin: 12px 14px 0;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .paper-saga-stage-list {
+    list-style: none;
+    margin: 10px 0 12px;
+    padding: 0 14px;
+    display: grid;
+    gap: 4px;
+  }
+  .paper-saga-stage {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-top: 1px dashed transparent;
+  }
+  .paper-saga-stage + .paper-saga-stage {
+    border-top-color: var(--border);
+  }
+  .paper-saga-stage-icon {
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    font-size: 12px;
+    line-height: 1;
+    background: var(--bg-base);
+    color: var(--text-tertiary);
+  }
+  .paper-saga-stage-done .paper-saga-stage-icon {
+    background: color-mix(in srgb, var(--tone-success, #2ea043) 22%, transparent);
+    color: var(--tone-success, #2ea043);
+  }
+  .paper-saga-stage-failed .paper-saga-stage-icon {
+    background: color-mix(in srgb, var(--tone-caution, #d29922) 22%, transparent);
+    color: var(--tone-caution, #d29922);
+  }
+  .paper-saga-stage-pending .paper-saga-stage-icon {
+    background: color-mix(in srgb, var(--text-tertiary) 14%, transparent);
+  }
+  .paper-saga-stage-label {
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+  .paper-saga-stage-status {
+    color: var(--text-tertiary);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .paper-saga-error {
+    margin: 8px 14px;
+    padding: 10px 12px;
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    white-space: pre-wrap;
+    overflow-x: auto;
+  }
+  .paper-saga-retry {
+    padding: 0 14px 14px;
+  }
+  @media (max-width: 600px) {
+    .paper-saga-card summary {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .paper-saga-stage {
+      grid-template-columns: 22px minmax(0, 1fr);
+    }
+    .paper-saga-stage-status {
+      grid-column: 2 / -1;
+    }
+  }
+</style>

@@ -1,0 +1,145 @@
+---
+import { readConsentFromHeader } from '@openxiv/shared';
+
+/**
+ * Twitter (X) Universal Web Tag (uwt.js) integration. Gated three ways:
+ *
+ *   1. Server-render gate: if `PUBLIC_TWITTER_TRACKING_ENABLED !== 'true'`
+ *      we emit NOTHING — no script, no helper, no debug hook.
+ *   2. Consent gate: if the request's `openxiv_consent` cookie does not
+ *      grant `marketing`, we still emit a tiny no-op helper so call
+ *      sites don't have to feature-detect, but we DON'T emit the uwt.js
+ *      base tag, so no network request leaves the browser.
+ *   3. Runtime gate: the helper itself rechecks the cookie on each
+ *      `event(...)` call. A user who revokes consent mid-session sees
+ *      `window.openxivTwitter.event(...)` no-op until next pageload.
+ *
+ * The base tag is taken verbatim from the X Ads Pixel dashboard for
+ * pixel rch4y. The `twq('config', PIXEL_ID)` call inside uwt.js fires
+ * the implicit PageView. Custom events (Signup / PaperSubmitted) ride
+ * on `twq('event', EVENT_ID, params)`.
+ */
+
+const PIXEL_ID = (import.meta.env.PUBLIC_TWITTER_PIXEL_ID || 'rch4y') as string;
+const FLAG_RAW = (import.meta.env.PUBLIC_TWITTER_TRACKING_ENABLED ?? 'true') as string;
+// Flag default = true; only an explicit 'false' string disables.
+const FLAG_ON = FLAG_RAW !== 'false';
+
+const cookieHeader = Astro.request.headers.get('cookie');
+const consent = readConsentFromHeader(cookieHeader);
+const marketingOk = consent?.marketing === true;
+
+// Server-render gate: when the flag is off, we don't emit ANYTHING.
+// Tests assert no `pxid=rch4y` appears in the HTML source in flag-off
+// mode.
+const renderScript = FLAG_ON;
+---
+
+{renderScript && (
+  <>
+    {/* Helper surface always present (when flag on). It no-ops when
+        consent is missing or DNT is set so call sites can fire without
+        checking. */}
+    <script is:inline define:vars={{ pixelId: PIXEL_ID, marketingOk }}>
+      (function () {
+        var DEBOUNCE_MS = 500;
+        var lastFire = Object.create(null);
+        function dntOn() {
+          try {
+            if (navigator.doNotTrack === '1' || window.doNotTrack === '1') return true;
+            if (navigator.globalPrivacyControl === true) return true;
+          } catch (_e) {}
+          return false;
+        }
+        function marketingGranted() {
+          // Re-read the cookie on every call so a mid-session
+          // revoke takes effect for subsequent events.
+          try {
+            var m = /(?:^|;\s*)openxiv_consent=([^;]+)/.exec(document.cookie);
+            if (!m) return false;
+            var pad = '==='.slice(0, (4 - (m[1].length % 4)) % 4);
+            var raw = atob(m[1].replace(/-/g, '+').replace(/_/g, '/') + pad);
+            var bytes = new Uint8Array(raw.length);
+            for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+            var obj = JSON.parse(new TextDecoder().decode(bytes));
+            return obj && obj.v === 1 && obj.m === 1;
+          } catch (_e) {
+            return false;
+          }
+        }
+        function ensureBaseTag() {
+          if (dntOn()) return false;
+          if (!marketingGranted()) return false;
+          if (typeof window.twq === 'function') return true;
+          try {
+            !function(e,t,n,s,u,a){
+              e.twq||(s=e.twq=function(){s.exe?s.exe.apply(s,arguments):s.queue.push(arguments)},
+              s.version='1.1',s.queue=[],
+              u=t.createElement(n),u.async=!0,u.src='https://static.ads-twitter.com/uwt.js',
+              u.onerror=function(){try{console.warn('[openxivTwitter] uwt.js failed to load')}catch(_){}},
+              a=t.getElementsByTagName(n)[0],a.parentNode.insertBefore(u,a))
+            }(window,document,'script');
+            window.twq('config', pixelId);
+            return true;
+          } catch (_e) {
+            return false;
+          }
+        }
+        window.openxivTwitter = window.openxivTwitter || {};
+        window.openxivTwitter.event = function (eventId, params) {
+          if (dntOn()) return;
+          if (!marketingGranted()) return;
+          if (!ensureBaseTag()) return;
+          if (!eventId || typeof eventId !== 'string') return;
+          var now = Date.now();
+          var last = lastFire[eventId] || 0;
+          if (now - last < DEBOUNCE_MS) return;
+          lastFire[eventId] = now;
+          try {
+            window.twq('event', eventId, params || {});
+          } catch (e) {
+            // never throw out of a fire
+          }
+        };
+        window.openxivTwitter.pixelId = pixelId;
+        // Marker — tests / X Pixel Helper extension can sanity-check.
+        window.openxivTwitter._configured = !!marketingOk;
+        if (!marketingOk && marketingGranted()) ensureBaseTag();
+        window.addEventListener('openxiv:consent', function (ev) {
+          try {
+            if (ev.detail && ev.detail.marketing) ensureBaseTag();
+          } catch (_e) {}
+        });
+      })();
+    </script>
+
+    {marketingOk && (
+      <script
+        is:inline
+        define:vars={{ pixelId: PIXEL_ID }}
+        async
+        set:html={`
+          !function(e,t,n,s,u,a){
+            e.twq||(s=e.twq=function(){s.exe?s.exe.apply(s,arguments):s.queue.push(arguments)},
+            s.version='1.1',s.queue=[],
+            u=t.createElement(n),u.async=!0,u.src='https://static.ads-twitter.com/uwt.js',
+            u.onerror=function(){try{console.warn('[openxivTwitter] uwt.js failed to load')}catch(_){}},
+            a=t.getElementsByTagName(n)[0],a.parentNode.insertBefore(u,a))
+          }(window,document,'script');
+          // Cap initial load: if uwt.js hasn't booted in 3s, abandon and
+          // leave window.twq as a no-op queue (twq.exe never set).
+          setTimeout(function(){
+            if (window.twq && !window.twq.exe) {
+              try { console.warn('[openxivTwitter] uwt.js timeout (3s)'); } catch (_) {}
+            }
+          }, 3000);
+          try {
+            window.twq('config','${PIXEL_ID}');
+          } catch (e) {
+            try { console.warn('[openxivTwitter] config failed:', e && e.message); } catch (_) {}
+          }
+        `}
+      />
+    )}
+  </>
+)}

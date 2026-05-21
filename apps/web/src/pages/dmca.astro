@@ -1,0 +1,43 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="OpenXiv — DMCA / takedown" description="How to file a DMCA-style takedown notice on OpenXiv.">
+  <main class="container-narrow">
+    <h1 class="title-serif">DMCA / takedown</h1>
+    <p class="muted">Procedure for asking us to remove content. Last updated 2026-05-17.</p>
+
+    <h2 class="title-serif" style="font-size: 22px;">What you can file a notice about</h2>
+    <ul class="body-serif">
+      <li>Content you hold copyright in that's been republished without permission.</li>
+      <li>Content that infringes a trademark you hold.</li>
+      <li>Personal information you didn't consent to publish.</li>
+      <li>Defamatory or unlawful content.</li>
+      <li>Authors retracting their own paper — file under "self-retraction" with proof of ORCID match.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px;">How to file</h2>
+    <p class="body-serif">Send an email to <a href="mailto:davidich.alfyorov@gmail.com"><code>davidich.alfyorov@gmail.com</code></a> with:</p>
+    <ol class="body-serif">
+      <li>Your identity (legal name, organisation if applicable).</li>
+      <li>The OpenXiv id of the paper or URL of the post (e.g. <code>openxiv:cs.AI.2026.00117</code>).</li>
+      <li>The specific portion alleged to infringe.</li>
+      <li>A statement, under penalty of perjury, that you have a good-faith belief the use is unauthorised.</li>
+      <li>Your physical signature (typed name OK for self-retractions).</li>
+    </ol>
+
+    <h2 class="title-serif" style="font-size: 22px;">What happens next</h2>
+    <ul class="body-serif">
+      <li>We acknowledge within 3 business days.</li>
+      <li>If the notice is clearly valid we tombstone the content: it stays at its OpenXiv id with a "retracted" banner so citations don't break.</li>
+      <li>If it's a dispute we notify the original author and give them 10 days to respond.</li>
+      <li>Final decisions are at the operator's discretion. We err on the side of preserving public-interest research.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px;">Counter-notice</h2>
+    <p class="body-serif">
+      If your work was taken down and you disagree, file a counter-notice to the same address. Provide the
+      same identifying info plus a statement that the takedown was filed mistakenly. We forward to the original
+      filer and restore after 10 business days if no court order is presented.
+    </p>
+  </main>
+</Base>

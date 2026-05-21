@@ -1,0 +1,301 @@
+---
+import Base from '../layouts/Base.astro';
+
+const apiBase =
+  (typeof process !== 'undefined' && process.env?.INTERNAL_API_BASE) ||
+  (typeof process !== 'undefined' && process.env?.PUBLIC_API_BASE) ||
+  import.meta.env.PUBLIC_API_BASE ||
+  'http://localhost:4000';
+
+interface StatsResponse {
+  generatedAt: string;
+  overview: {
+    papersTotal: number;
+    papersWithDisclosure: number;
+    papersWithoutDisclosure: number;
+    levelNone: number;
+    levelAssistant: number;
+    levelCoauthor: number;
+    levelPrimary: number;
+    summariesAiGenerated: number;
+  };
+  byCategory: Array<{
+    category: string;
+    papersTotal: number;
+    levelNone: number;
+    levelAssistant: number;
+    levelCoauthor: number;
+    levelPrimary: number;
+  }>;
+  byAiUse: Array<{ aiUse: string; papers: number }>;
+  byModel: Array<{ modelName: string; modelVendor: string | null; papers: number }>;
+  weekly: Array<{
+    week: string;
+    papersTotal: number;
+    levelNone: number;
+    levelAssistant: number;
+    levelCoauthor: number;
+    levelPrimary: number;
+  }>;
+  detector: {
+    flaggedAboveThreshold: number;
+    totalScored: number;
+    avgScore: number;
+    minScore: number;
+    maxScore: number;
+  };
+  antiVanity?: {
+    papersPublished: number;
+    papersWithRevisions: number;
+    avgVersionsPerPaper: number;
+    questionsResolvedByV2: number;
+    bestUnresolved: number;
+    endorsementsByVerb: Record<string, number>;
+  };
+}
+
+const ENDORSE_VERB_LABEL: Record<string, string> = {
+  verified_derivation: 'Verified derivation',
+  checked_references: 'Checked references',
+  reproduced_result: 'Reproduced result',
+  useful_background: 'Useful background',
+  important_but_flawed: 'Important but flawed',
+  needs_correction: 'Needs correction',
+};
+
+let data: StatsResponse | null = null;
+let error: string | null = null;
+
+try {
+  const res = await fetch(`${apiBase}/api/stats`);
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  data = (await res.json()) as StatsResponse;
+} catch (e) {
+  error = (e as Error).message;
+}
+
+function pct(n: number, total: number): string {
+  if (total === 0) return '0.0%';
+  return ((n / total) * 100).toFixed(1) + '%';
+}
+
+const overviewCards = data
+  ? [
+      { label: 'Published papers', value: data.overview.papersTotal },
+      { label: 'With disclosure', value: data.overview.papersWithDisclosure },
+      { label: 'No disclosure', value: data.overview.papersWithoutDisclosure },
+      { label: 'Level: none', value: data.overview.levelNone },
+      { label: 'Level: assistant', value: data.overview.levelAssistant },
+      { label: 'Level: coauthor', value: data.overview.levelCoauthor },
+      { label: 'Level: primary', value: data.overview.levelPrimary },
+      { label: 'Summaries AI-drafted', value: data.overview.summariesAiGenerated },
+    ]
+  : [];
+---
+<Base title="OpenXiv — disclosure stats" description="Public dashboard of AI-disclosure patterns across OpenXiv papers.">
+  <main class="container">
+    <h1 class="title-serif">Disclosure stats</h1>
+    <p class="muted" style="max-width: 60ch;">
+      A public ledger of how authors are disclosing AI use on OpenXiv. Refreshed hourly from
+      <code>app.openxiv.disclosure</code> records. All papers below are published — papers in
+      draft or under review are excluded.
+    </p>
+
+    {error && (
+      <div class="card" style="border-color: var(--tone-caution);">
+        <strong>Stats unavailable.</strong>
+        <p class="muted" style="margin: 6px 0 0;">{error}</p>
+      </div>
+    )}
+
+    {data && (
+      <>
+        <p class="muted">Generated at {data.generatedAt}</p>
+
+        <section class="card" style="margin-bottom: 16px;">
+          <h2 style="margin: 0 0 8px; font-family: var(--font-serif);">Overview</h2>
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+            {overviewCards.map((s) => (
+              <div style="border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;">
+                <div class="muted" style="font-size: 12px;">{s.label}</div>
+                <div style="font-size: 22px; font-family: var(--font-serif); margin-top: 4px;">
+                  {s.value}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p class="muted" style="margin-top: 12px;">
+            <a href={`${apiBase}/api/stats.csv?cut=overview`} download>Download CSV</a>
+          </p>
+        </section>
+
+        <section class="card" style="margin-bottom: 16px;">
+          <h2 style="margin: 0 0 8px; font-family: var(--font-serif);">By disclosure level × category</h2>
+          <div class="stats-table-wrap">
+            <table class="stats-table">
+              <thead>
+                <tr style="text-align: left; color: var(--text-secondary); font-size: 13px;">
+                  <th>Category</th><th>Total</th><th>none</th><th>assistant</th><th>coauthor</th><th>primary</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.byCategory.map((r) => (
+                  <tr style="border-top: 1px solid var(--border);">
+                    <td><code>{r.category}</code></td>
+                    <td>{r.papersTotal}</td>
+                    <td>{r.levelNone} <span class="muted">({pct(r.levelNone, r.papersTotal)})</span></td>
+                    <td>{r.levelAssistant} <span class="muted">({pct(r.levelAssistant, r.papersTotal)})</span></td>
+                    <td>{r.levelCoauthor} <span class="muted">({pct(r.levelCoauthor, r.papersTotal)})</span></td>
+                    <td>{r.levelPrimary} <span class="muted">({pct(r.levelPrimary, r.papersTotal)})</span></td>
+                  </tr>
+                ))}
+                {data.byCategory.length === 0 && (
+                  <tr><td colspan="6" class="muted">No published papers yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p class="muted" style="margin-top: 12px;">
+            <a href={`${apiBase}/api/stats.csv?cut=category`} download>Download CSV</a>
+          </p>
+        </section>
+
+        <section class="card" style="margin-bottom: 16px;">
+          <h2 style="margin: 0 0 8px; font-family: var(--font-serif);">AI-use distribution</h2>
+          <ul style="margin: 0; padding-left: 20px;">
+            {data.byAiUse.map((r) => (
+              <li><code>{r.aiUse}</code> — <strong>{r.papers}</strong> papers</li>
+            ))}
+            {data.byAiUse.length === 0 && <li class="muted">No disclosures with ai_used tags yet.</li>}
+          </ul>
+          <p class="muted" style="margin-top: 12px;">
+            <a href={`${apiBase}/api/stats.csv?cut=ai_use`} download>Download CSV</a>
+          </p>
+        </section>
+
+        <section class="card" style="margin-bottom: 16px;">
+          <h2 style="margin: 0 0 8px; font-family: var(--font-serif);">Most-disclosed models</h2>
+          <ul style="margin: 0; padding-left: 20px;">
+            {data.byModel.slice(0, 20).map((r) => (
+              <li>
+                <code>{r.modelName}</code>
+                {r.modelVendor ? ` (${r.modelVendor})` : ''} — <strong>{r.papers}</strong> papers
+              </li>
+            ))}
+            {data.byModel.length === 0 && <li class="muted">No disclosed models yet.</li>}
+          </ul>
+          <p class="muted" style="margin-top: 12px;">
+            <a href={`${apiBase}/api/stats.csv?cut=model`} download>Download CSV</a>
+          </p>
+        </section>
+
+        <section class="card" style="margin-bottom: 16px;">
+          <h2 style="margin: 0 0 8px; font-family: var(--font-serif);">Detector flags</h2>
+          <p>
+            <strong>{data.detector.flaggedAboveThreshold}</strong> of
+            <strong> {data.detector.totalScored}</strong> scored papers landed above the 65-point soft-flag threshold.
+            Avg composite: <strong>{data.detector.avgScore}</strong>, min {data.detector.minScore}, max {data.detector.maxScore}.
+          </p>
+        </section>
+
+        {data.antiVanity && (
+          <section class="card" style="margin-bottom: 16px;">
+            <h2 style="margin: 0 0 8px; font-family: var(--font-serif);">Anti-vanity observatory</h2>
+            <p class="muted" style="max-width: 60ch; margin: 0 0 12px;">
+              Signals that say something about <em>how</em> the corpus is used —
+              not download-counts or follower-counts. Numbers we'd be happy to
+              be measured on.
+            </p>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+              {[
+                { label: 'Papers published', value: data.antiVanity.papersPublished },
+                { label: 'Papers with revisions', value: data.antiVanity.papersWithRevisions },
+                { label: 'Avg versions / paper', value: data.antiVanity.avgVersionsPerPaper.toFixed(2) },
+                { label: 'Questions resolved by v2', value: data.antiVanity.questionsResolvedByV2 },
+                { label: 'Best unresolved open', value: data.antiVanity.bestUnresolved },
+              ].map((s) => (
+                <div style="border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;">
+                  <div class="muted" style="font-size: 12px;">{s.label}</div>
+                  <div style="font-size: 22px; font-family: var(--font-serif); margin-top: 4px;">{s.value}</div>
+                </div>
+              ))}
+            </div>
+            <h3 style="margin: 14px 0 6px; font-family: var(--font-serif); font-size: 14px;">Typed endorsements by verb</h3>
+            {Object.keys(data.antiVanity.endorsementsByVerb).length === 0 ? (
+              <p class="muted">No typed endorsements yet.</p>
+            ) : (
+              <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px;">
+                {Object.entries(data.antiVanity.endorsementsByVerb)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([verb, n]) => (
+                    <li style="display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: 13px;">
+                      <span>{ENDORSE_VERB_LABEL[verb] ?? verb}</span>
+                      <strong>{n}</strong>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </section>
+        )}
+
+        <section class="card">
+          <h2 style="margin: 0 0 8px; font-family: var(--font-serif);">Weekly cadence</h2>
+          <div class="stats-table-wrap">
+            <table class="stats-table">
+              <thead>
+                <tr style="text-align: left; color: var(--text-secondary); font-size: 13px;">
+                  <th>Week</th><th>Total</th><th>none</th><th>assistant</th><th>coauthor</th><th>primary</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.weekly.map((w) => (
+                  <tr style="border-top: 1px solid var(--border);">
+                    <td><code>{w.week.slice(0, 10)}</code></td>
+                    <td>{w.papersTotal}</td>
+                    <td>{w.levelNone}</td>
+                    <td>{w.levelAssistant}</td>
+                    <td>{w.levelCoauthor}</td>
+                    <td>{w.levelPrimary}</td>
+                  </tr>
+                ))}
+                {data.weekly.length === 0 && (
+                  <tr><td colspan="6" class="muted">No published papers yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p class="muted" style="margin-top: 12px;">
+            <a href={`${apiBase}/api/stats.csv?cut=weekly`} download>Download CSV</a>
+          </p>
+        </section>
+      </>
+    )}
+  </main>
+</Base>
+
+<style>
+  .stats-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .stats-table {
+    width: 100%;
+    min-width: 620px;
+    border-collapse: collapse;
+  }
+  .stats-table th,
+  .stats-table td {
+    padding: 8px 6px;
+    font-size: 14px;
+  }
+  .stats-table td code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  @media (max-width: 700px) {
+    .stats-table {
+      min-width: 560px;
+    }
+  }
+</style>

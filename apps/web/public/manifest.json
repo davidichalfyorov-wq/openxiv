@@ -1,0 +1,25 @@
+{
+  "name": "OpenXiv — preprint server on AT Protocol",
+  "short_name": "OpenXiv",
+  "description": "A preprint server that lives in your social feed. Built on the AT Protocol; preprints federate to Bluesky. Typed endorsements, Trust Passport, AI disclosure.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "minimal-ui",
+  "theme_color": "#0e0e10",
+  "background_color": "#fbfbfa",
+  "icons": [
+    {
+      "src": "/brand/logo-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["science", "education", "news"]
+}

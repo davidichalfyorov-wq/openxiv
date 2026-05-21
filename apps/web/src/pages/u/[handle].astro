@@ -1,0 +1,496 @@
+---
+import Base from '../../layouts/Base.astro';
+import PaperRow from '../../components/PaperRow.astro';
+import PostRow from '../../components/PostRow.astro';
+import ProfileSeo from '../../components/ProfileSeo.astro';
+import SubmissionRow from '../../components/SubmissionRow.astro';
+import { serverClient } from '../../lib/api';
+
+/**
+ * Normalise any percent-encoded form of the handle. Astro decodes
+ * single-encoded segments automatically, but a triple-encoded URL
+ * sneaks through (`did%253A…` → `did%3A…` in Astro.params, still
+ * containing `%`). We strip those before sending to the API so the
+ * lookup uses the human-readable identifier.
+ *
+ * The API has its own decode-until-stable guard (`normalizeProfileIdentifier`
+ * in apps/api/src/routes/profiles.ts) — this is the second copy of the
+ * invariant at the SSR boundary, because the user benefits from seeing
+ * a clean URL even before the request hits the API.
+ */
+function normalizeHandleParam(raw: string): string {
+  let current = raw;
+  for (let i = 0; i < 5; i++) {
+    if (!current.includes('%')) return current;
+    let next: string;
+    try {
+      next = decodeURIComponent(current);
+    } catch {
+      return current;
+    }
+    if (next === current) return current;
+    current = next;
+  }
+  return current;
+}
+
+const rawHandle = Astro.params.handle;
+if (!rawHandle) {
+  return new Response('Missing handle', { status: 400 });
+}
+const handle = normalizeHandleParam(rawHandle);
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let profile: Awaited<ReturnType<typeof client.profile>> | null = null;
+let items: Awaited<ReturnType<typeof client.profileStream>>['items'] = [];
+let extras: Awaited<ReturnType<typeof client.profileExtras>> | null = null;
+let submissions: Awaited<ReturnType<typeof client.mySubmissions>>['items'] = [];
+let error: string | null = null;
+let isOwner = false;
+
+/*
+  Load the viewer's own session in fail-safe mode. We only use it to
+  decide whether to show owner-only actions (Edit / Identity) on the
+  profile head. Any failure (anonymous viewer, API blip) collapses to
+  an unauthenticated session — the page renders normally for the public.
+*/
+let me: Awaited<ReturnType<typeof client.me>> | null = null;
+try {
+  me = await client.me();
+} catch {
+  me = { authenticated: false };
+}
+
+try {
+  profile = await client.profile(handle);
+  if (profile) {
+    // Pretty-URL canonicalisation: when the user has a `handle` AND the
+    // path segment we received is the DID (or legacy DID), 301 to the
+    // handle. This makes `/u/did:plc:abc` → `/u/alice` permanently, so
+    // bookmarks and AT-proto records can keep pointing at the DID form
+    // without making the surface URL ugly for the human reader.
+    if (
+      profile.handle &&
+      profile.handle !== handle &&
+      (handle.startsWith('did:') || handle.includes('%'))
+    ) {
+      return Astro.redirect(`/u/${profile.handle}`, 301);
+    }
+    isOwner = Boolean(me?.authenticated && me.user?.did && me.user.did === profile.did);
+    const [streamRes, extrasRes, submissionsRes] = await Promise.allSettled([
+      client.profileStream(profile.did, 50),
+      client.profileExtras(profile.did),
+      isOwner ? client.mySubmissions() : Promise.resolve(null),
+    ]);
+    if (streamRes.status === 'fulfilled') items = streamRes.value.items;
+    if (extrasRes.status === 'fulfilled') extras = extrasRes.value;
+    if (submissionsRes.status === 'fulfilled' && submissionsRes.value) {
+      submissions = submissionsRes.value.items;
+    }
+  }
+} catch (err) {
+  error = (err as Error).message;
+}
+
+const modes = extras?.modes ?? [];
+const aiPolicy = extras?.cards.ai_policy ?? null;
+const readingGuide = extras?.cards.reading_guide ?? null;
+const MODE_META: Record<string, { label: string; tone: string }> = {
+  author: { label: 'Author', tone: 'accent' },
+  reviewer: { label: 'Reviewer', tone: 'info' },
+  reader: { label: 'Reader', tone: 'success' },
+};
+
+const tab = Astro.url.searchParams.get('tab') ?? 'all';
+const filtered =
+  tab === 'papers'
+    ? items.filter((i) => i.kind === 'paper')
+    : tab === 'posts'
+      ? items.filter((i) => i.kind === 'post')
+      : items;
+
+const papersCount = items.filter((i) => i.kind === 'paper').length;
+const postsCount = items.filter((i) => i.kind === 'post').length;
+const tabs = isOwner
+  ? (['all', 'papers', 'posts', 'submissions'] as const)
+  : (['all', 'papers', 'posts'] as const);
+const recentPapersForSeo = items
+  .filter((i) => i.kind === 'paper')
+  .slice(0, 20)
+  .map((i) => {
+    const p = i.kind === 'paper' ? i.paper : null;
+    return {
+      paperId: p?.id ?? '',
+      title: p?.title ?? '',
+      openxivId: p?.openxivId ?? null,
+      openxivUrlId: p?.openxivUrlId ?? null,
+      publishedAt: p?.publishedAt ?? null,
+    };
+  });
+
+const publicBase = import.meta.env.PUBLIC_WEB_BASE ?? 'http://localhost:4321';
+const canonical = `${publicBase}/u/${encodeURIComponent(handle)}`;
+---
+<Base title={profile?.displayName ?? `@${handle}`} description={profile?.bio?.slice(0, 200) ?? `OpenXiv profile of @${handle}.`}>
+  {profile && (
+    <Fragment slot="head">
+      <ProfileSeo profile={profile} recentPapers={recentPapersForSeo} canonical={canonical} />
+    </Fragment>
+  )}
+  <main class="container">
+    {error && (
+      <div class="card" style="border-color: var(--tone-caution); padding: 18px;">
+        <strong>Profile not available</strong>
+        <p class="muted" style="margin: 8px 0 4px;">
+          We couldn't find a profile for <code>{handle}</code>.
+        </p>
+        <p class="muted" style="margin: 0 0 12px; font-size: 13px;">
+          {handle.startsWith('did:')
+            ? 'This DID does not match any active account. If you came here from an older link, the user may have a friendlier handle now — try the OpenXiv home feed.'
+            : 'This handle is not registered. Double-check the spelling, or browse the home feed.'}
+        </p>
+        <div class="row" style="gap: 8px;">
+          <a class="btn btn-sm" href="/">Home feed</a>
+          <a class="btn btn-sm" href="/search">Search</a>
+        </div>
+        {/*
+          Surface the raw error only in development — it leaks API
+          internals (path, version, error class) that aren't useful to
+          end-users. In dev it helps spot decode regressions.
+        */}
+        {import.meta.env.DEV && (
+          <details style="margin-top: 12px;">
+            <summary class="muted" style="font-size: 12px;">debug</summary>
+            <pre class="muted" style="font-size: 11px; white-space: pre-wrap; word-break: break-all;">{error}</pre>
+          </details>
+        )}
+      </div>
+    )}
+
+    {profile && (
+      <>
+        <header class="profile-head">
+          <div class="profile-avatar">
+            {profile.avatarUrl ? (
+              <img src={profile.avatarUrl} alt={`Avatar of ${profile.displayName}`} />
+            ) : (
+              <span>{(profile.displayName ?? handle).slice(0, 1)}</span>
+            )}
+          </div>
+          <div>
+            <h1 class="title-serif" style="margin-bottom: 4px; display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              {profile.displayName}
+              {profile.role === 'admin' && (
+                <span
+                  class="badge badge-tone-info profile-admin-badge"
+                  title="OpenXiv administrator"
+                  aria-label="OpenXiv administrator"
+                >ADMIN</span>
+              )}
+            </h1>
+            <div class="muted profile-handle">
+              <span>@{profile.handle ?? handle}</span>
+              {profile.orcid && (
+                <a href={`https://orcid.org/${profile.orcid}`} target="_blank" rel="noreferrer">
+                  <span class="badge badge-tone-info">ORCID {profile.orcid}</span>
+                </a>
+              )}
+              {profile.role === 'moderator' && (
+                <span class="badge badge-tone-warning">moderator</span>
+              )}
+            </div>
+            {profile.bio && <p class="body-serif" style="margin-top: 12px;">{profile.bio}</p>}
+            {modes.length > 0 && (
+              <div class="profile-modes" aria-label="Profile modes">
+                {modes.map((m) => (
+                  <span class={`profile-mode-pill profile-mode-${MODE_META[m]?.tone ?? 'neutral'}`}>
+                    {MODE_META[m]?.label ?? m}
+                  </span>
+                ))}
+              </div>
+            )}
+            {/*
+              Bluesky follow badge. Rendered ONLY on the client because it
+              depends on the viewer's own bsky session — the server can't
+              SSR this without leaking who the viewer is into the cache.
+              Hidden by default and only filled in once `/api/me/bluesky/
+              follows/check?did=...` returns `{follows:true}`. Fails-silent
+              if the viewer isn't signed in via Bluesky.
+            */}
+            {profile.did && (
+              <div class="profile-bsky-follow" data-target-did={profile.did}>
+                <span class="badge badge-tone-info" data-bsky-follow-badge hidden>you follow on Bluesky</span>
+                <button
+                  class="btn btn-sm"
+                  type="button"
+                  data-bsky-follow-button
+                  data-target-did={profile.did}
+                  data-target-handle={profile.handle ?? handle}
+                  data-target-name={profile.displayName}
+                >
+                  Follow on Bluesky
+                </button>
+              </div>
+            )}
+            <div class="muted profile-counts">
+              <span><strong>{papersCount}</strong> papers</span>
+              <span><strong>{postsCount}</strong> posts</span>
+            </div>
+            {/*
+              Owner-only quick actions. Rendered when the viewer's DID
+              matches the profile DID — i.e. you are looking at your own
+              page. Surfaces the two settings pages explicitly so the
+              user doesn't have to type URLs.
+            */}
+            {me?.authenticated && me.user?.did && me.user.did === profile.did && (
+              <div class="row profile-owner-actions" style="gap: 8px; margin-top: 14px;">
+                <a class="btn btn-sm" href="/settings/profile">Edit profile</a>
+                <a class="btn btn-sm" href="/settings/identity">Identity &amp; linking</a>
+                <a class="btn btn-sm" href="/me/submissions">Submitted Papers</a>
+                <a class="btn btn-sm" href={`/@${profile.handle ?? handle}/insights`}>Insights</a>
+              </div>
+            )}
+          </div>
+        </header>
+
+        <nav class="row profile-tabs">
+          {tabs.map((t) => (
+            <a
+              href={`?tab=${t}`}
+              class={tab === t ? 'btn btn-primary' : 'btn'}
+              style="text-decoration:none;"
+            >
+              {t === 'all'
+                ? 'All'
+                : t === 'papers'
+                  ? 'Papers'
+                  : t === 'posts'
+                    ? 'Posts'
+                    : 'Submitted Papers'}
+            </a>
+          ))}
+        </nav>
+
+        <div class="stack">
+          {aiPolicy && modes.includes('author') && (
+            <article class="card">
+              <header class="profile-card-head">
+                <h2>AI Usage Policy</h2>
+                <p class="muted">How this author uses (and avoids) AI in their work.</p>
+              </header>
+              <dl class="profile-card-facts">
+                {aiPolicy.models_used && aiPolicy.models_used.length > 0 && (
+                  <>
+                    <dt>Models used</dt>
+                    <dd>{aiPolicy.models_used.join(', ')}</dd>
+                  </>
+                )}
+                {aiPolicy.models_avoided && aiPolicy.models_avoided.length > 0 && (
+                  <>
+                    <dt>Models avoided</dt>
+                    <dd>{aiPolicy.models_avoided.join(', ')}</dd>
+                  </>
+                )}
+                {aiPolicy.use_cases && aiPolicy.use_cases.length > 0 && (
+                  <>
+                    <dt>Used for</dt>
+                    <dd>{aiPolicy.use_cases.join(', ')}</dd>
+                  </>
+                )}
+                {aiPolicy.verification_practice && (
+                  <>
+                    <dt>Verification</dt>
+                    <dd style="white-space: pre-wrap;">{aiPolicy.verification_practice}</dd>
+                  </>
+                )}
+                {aiPolicy.failure_modes && (
+                  <>
+                    <dt>Known failure modes</dt>
+                    <dd style="white-space: pre-wrap;">{aiPolicy.failure_modes}</dd>
+                  </>
+                )}
+              </dl>
+            </article>
+          )}
+
+          {readingGuide && modes.includes('reader') && (
+            <article class="card">
+              <header class="profile-card-head">
+                <h2>How to read me</h2>
+                <p class="muted">Where this person suggests starting if you're new to their work.</p>
+              </header>
+              <dl class="profile-card-facts">
+                {readingGuide.prerequisites && (
+                  <>
+                    <dt>Prerequisites</dt>
+                    <dd style="white-space: pre-wrap;">{readingGuide.prerequisites}</dd>
+                  </>
+                )}
+                {readingGuide.start_here && (
+                  <>
+                    <dt>Start here</dt>
+                    <dd style="white-space: pre-wrap;">{readingGuide.start_here}</dd>
+                  </>
+                )}
+                {readingGuide.avoid_starting_with && (
+                  <>
+                    <dt>Avoid starting with</dt>
+                    <dd style="white-space: pre-wrap;">{readingGuide.avoid_starting_with}</dd>
+                  </>
+                )}
+                {readingGuide.common_pitfalls && (
+                  <>
+                    <dt>Common pitfalls</dt>
+                    <dd style="white-space: pre-wrap;">{readingGuide.common_pitfalls}</dd>
+                  </>
+                )}
+              </dl>
+            </article>
+          )}
+
+          {tab === 'submissions' && isOwner ? (
+            submissions.map((submission) => <SubmissionRow submission={submission} />)
+          ) : (
+            filtered.map((item) => (
+              item.kind === 'paper'
+                ? <PaperRow paper={item.paper} />
+                : <PostRow post={item.post} createdAt={item.createdAt} />
+            ))
+          )}
+          {tab === 'submissions' && isOwner && submissions.length === 0 && (
+            <p class="muted">No submitted papers yet.</p>
+          )}
+          {!(tab === 'submissions' && isOwner) && filtered.length === 0 && (
+            <p class="muted">No public activity in this view yet.</p>
+          )}
+        </div>
+      </>
+    )}
+  </main>
+</Base>
+
+{/*
+  Bluesky-follow badge probe. Runs once on mount; reveals the badge only
+  when the viewer (a) is signed in via Bluesky AND (b) follows this
+  profile's DID. Silent on any error path so an offline /healthz never
+  surfaces here as a visible failure.
+*/}
+<script is:inline define:vars={{ profileDid: profile?.did ?? null }}>
+  (function () {
+    if (profileDid && typeof window.openxivTrack === 'function') {
+      window.openxivTrack('profile_view', profileDid, 'profile', { route: '/u' });
+    }
+    var wrapper = document.querySelector('.profile-bsky-follow');
+    if (!wrapper) return;
+    var badge = wrapper.querySelector('[data-bsky-follow-badge]');
+    var button = wrapper.querySelector('[data-bsky-follow-button]');
+    var did = wrapper.getAttribute('data-target-did');
+    if (!did) return;
+    var follows = false;
+    function render(next) {
+      follows = next === true;
+      if (badge) badge.hidden = !follows;
+      if (button) button.textContent = follows ? 'Unfollow on Bluesky' : 'Follow on Bluesky';
+    }
+    fetch('/api-proxy/me/bluesky/follows/check?did=' + encodeURIComponent(did), {
+      credentials: 'include',
+    })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .then(function (d) {
+        render(Boolean(d && d.follows === true));
+      })
+      .catch(function () {});
+    if (!button) return;
+    button.addEventListener('click', function () {
+      button.disabled = true;
+      var method = follows ? 'DELETE' : 'POST';
+      var wasFollowing = follows;
+      var url = follows
+        ? '/api-proxy/me/bluesky/follows/' + encodeURIComponent(did)
+        : '/api-proxy/me/bluesky/follows';
+      fetch(url, {
+        method: method,
+        credentials: 'include',
+        headers: follows ? {} : { 'content-type': 'application/json' },
+        body: follows
+          ? undefined
+          : JSON.stringify({
+              did: did,
+              handle: button.getAttribute('data-target-handle') || undefined,
+              displayName: button.getAttribute('data-target-name') || undefined,
+            }),
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error('follow failed');
+          render(!wasFollowing);
+          button.textContent = wasFollowing ? 'Unfollow queued' : 'Follow queued';
+        })
+        .catch(function () {})
+        .finally(function () {
+          button.disabled = false;
+        });
+    });
+  })();
+</script>
+
+<style>
+  .profile-head { display: flex; gap: 18px; margin-bottom: 20px; }
+  .profile-avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: var(--bg-elev);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-serif);
+    font-size: 28px;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .profile-avatar img { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; }
+  .profile-handle { display: flex; gap: 10px; flex-wrap: wrap; }
+  .profile-admin-badge {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 4px;
+    /* Slightly bolder than the header badge — this is the public-profile
+       declaration of "this account is an OpenXiv operator". Still text-
+       only (no icon, no gradient) per the launch-final design note. */
+  }
+  .profile-counts { margin-top: 10px; display: flex; gap: 16px; }
+  .profile-bsky-follow { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .profile-tabs { gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+
+  .profile-modes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .profile-mode-pill {
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .profile-mode-accent { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+  .profile-mode-info { background: color-mix(in srgb, var(--tone-info) 14%, transparent); color: var(--tone-info); }
+  .profile-mode-success { background: color-mix(in srgb, var(--tone-success) 14%, transparent); color: var(--tone-success); }
+  .profile-mode-neutral { background: var(--bg-elev); color: var(--text-secondary); }
+
+  .profile-card-head h2 { margin: 0; font-family: var(--font-serif); font-size: 16px; }
+  .profile-card-head p { margin: 4px 0 12px; font-size: 13px; }
+  .profile-card-facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 14px;
+    font-size: 13px;
+    margin: 0;
+  }
+  .profile-card-facts dt { color: var(--text-secondary); align-self: start; }
+  .profile-card-facts dd { margin: 0; }
+</style>

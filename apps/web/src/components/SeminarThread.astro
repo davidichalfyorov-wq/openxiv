@@ -1,0 +1,297 @@
+---
+import { serverClient, type PaperDetail, type UserMeResponse } from '../lib/api';
+
+interface Props {
+  paper: PaperDetail;
+  me: UserMeResponse | null;
+}
+const { paper, me } = Astro.props;
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let data: Awaited<ReturnType<typeof client.listDiscussion>> | null = null;
+try {
+  data = await client.listDiscussion(paper.id);
+} catch {
+  data = null;
+}
+
+const LABEL_META: Record<string, { text: string; tone: 'caution' | 'info' | 'success' }> = {
+  best_unresolved: { text: 'Best unresolved', tone: 'caution' },
+  resolved_by_v2: { text: 'Resolved by v2', tone: 'success' },
+};
+
+const isAuthor = data?.viewerIsAuthor ?? false;
+const isMod = data?.viewerCanModerate ?? false;
+const discussionItems = Array.isArray(data?.items) ? data.items : [];
+const discussionAvailable = data !== null && Array.isArray(data.items);
+const discussionCanDiscuss = data !== null && Array.isArray(data.items) ? data.canDiscuss : false;
+const discussionClosed = data !== null && Array.isArray(data.items) && data.canDiscuss === false;
+const canPost = Boolean(me?.authenticated) && discussionCanDiscuss;
+
+function relativeDate(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return 'just now';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  return `${Math.floor(hr / 24)}d ago`;
+}
+---
+<article class="card seminar" aria-labelledby="seminar-heading">
+  <header class="seminar-head">
+    <h2 id="seminar-heading">Living Seminar</h2>
+    <p class="muted seminar-subtitle">
+      Paper-scoped discussion. Author can pin one post and mark questions
+      <em>best unresolved</em>; mods can hide off-topic posts.
+    </p>
+  </header>
+
+  {!discussionAvailable && (
+    <p class="muted">Discussion is temporarily unavailable.</p>
+  )}
+
+  {discussionClosed && (
+    <p class="muted">Discussion opens once the paper has been mirrored to AT-Proto PDS.</p>
+  )}
+
+  {discussionCanDiscuss && discussionItems.length === 0 && (
+    <p class="muted">No comments yet. Start the seminar.</p>
+  )}
+
+  {discussionAvailable && discussionItems.length > 0 && (
+    <ul class="seminar-list">
+      {discussionItems.map((p) => (
+        <li class={`seminar-item ${p.pinnedByAuthor ? 'seminar-pinned' : ''} ${p.hiddenByMod ? 'seminar-hidden' : ''}`}>
+          <div class="seminar-row">
+            <code class="muted seminar-did">{p.authorDid.slice(0, 24)}…</code>
+            <time class="muted seminar-time" datetime={p.createdAt}>{relativeDate(p.createdAt)}</time>
+            {p.pinnedByAuthor && <span class="seminar-pin-pill">Pinned by author</span>}
+            {p.label && (
+              <span class={`seminar-label-pill seminar-label-${LABEL_META[p.label]?.tone ?? 'info'}`}>
+                {LABEL_META[p.label]?.text ?? p.label}
+              </span>
+            )}
+            {p.hiddenByMod && <span class="seminar-hidden-pill">Hidden by mod</span>}
+          </div>
+          <p class="seminar-text body-serif">{p.text}</p>
+          {(isAuthor || isMod) && (
+            <div class="seminar-controls">
+              {isAuthor && (
+                <>
+                  <button
+                    class="btn btn-sm"
+                    type="button"
+                    data-seminar-pin
+                    data-paper-id={paper.id}
+                    data-post-id={p.id}
+                    data-pin-action={p.pinnedByAuthor ? 'unpin' : 'pin'}
+                  >{p.pinnedByAuthor ? 'Unpin' : 'Pin'}</button>
+                  <button
+                    class="btn btn-sm"
+                    type="button"
+                    data-seminar-label
+                    data-post-id={p.id}
+                    data-label="best_unresolved"
+                  >Mark best unresolved</button>
+                  <button
+                    class="btn btn-sm"
+                    type="button"
+                    data-seminar-label
+                    data-post-id={p.id}
+                    data-label="resolved_by_v2"
+                  >Mark resolved by v2</button>
+                  {p.label && (
+                    <button
+                      class="btn btn-sm"
+                      type="button"
+                      data-seminar-label
+                      data-post-id={p.id}
+                      data-label=""
+                    >Clear label</button>
+                  )}
+                </>
+              )}
+              {isMod && (
+                <button
+                  class="btn btn-sm"
+                  type="button"
+                  data-seminar-hide
+                  data-post-id={p.id}
+                  data-hidden={p.hiddenByMod ? 'false' : 'true'}
+                >{p.hiddenByMod ? 'Unhide' : 'Hide (mod)'}</button>
+              )}
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  )}
+
+  {canPost && (
+    <form id="seminar-form" class="seminar-form" data-paper-id={paper.id}>
+      <label class="muted seminar-field-label" for="seminar-text">Add to the seminar</label>
+      <textarea
+        id="seminar-text"
+        class="input seminar-textarea"
+        name="text"
+        rows="3"
+        maxlength="2000"
+        placeholder="One question or one observation."
+        required
+      ></textarea>
+      <div class="row" style="justify-content: space-between; align-items: center;">
+        <span class="muted seminar-counter" id="seminar-counter">0 / 2000</span>
+        <button class="btn btn-primary" type="submit">Post</button>
+      </div>
+      <p id="seminar-status" class="muted seminar-status" aria-live="polite"></p>
+    </form>
+  )}
+</article>
+
+<script is:inline>
+  (function () {
+    function flash(el, msg) {
+      if (!el) return;
+      el.textContent = msg;
+    }
+    var counter = document.getElementById('seminar-counter');
+    var ta = document.getElementById('seminar-text');
+    if (ta && counter) {
+      ta.addEventListener('input', function () {
+        counter.textContent = ta.value.length + ' / 2000';
+      });
+    }
+    var form = document.getElementById('seminar-form');
+    if (form) {
+      form.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        var paperId = form.getAttribute('data-paper-id');
+        var status = document.getElementById('seminar-status');
+        flash(status, 'Posting…');
+        try {
+          var res = await fetch('/api-proxy/papers/' + encodeURIComponent(paperId) + '/discussion', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ text: ta.value }),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          flash(status, 'Posted — reloading.');
+          setTimeout(function () { location.reload(); }, 500);
+        } catch (e) {
+          flash(status, 'Failed: ' + (e && e.message ? e.message : 'unknown'));
+        }
+      });
+    }
+
+    document.querySelectorAll('[data-seminar-pin]').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var paperId = btn.getAttribute('data-paper-id');
+        var postId = btn.getAttribute('data-post-id');
+        var action = btn.getAttribute('data-pin-action');
+        try {
+          var res = await fetch('/api-proxy/papers/' + encodeURIComponent(paperId) + '/discussion/pin', {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ postId: action === 'pin' ? postId : null }),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          location.reload();
+        } catch (e) {
+          alert('Pin failed: ' + (e && e.message ? e.message : 'unknown'));
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-seminar-label]').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var postId = btn.getAttribute('data-post-id');
+        var label = btn.getAttribute('data-label') || null;
+        try {
+          var res = await fetch('/api-proxy/discussion/' + encodeURIComponent(postId) + '/label', {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ label: label }),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          location.reload();
+        } catch (e) {
+          alert('Label failed: ' + (e && e.message ? e.message : 'unknown'));
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-seminar-hide]').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var postId = btn.getAttribute('data-post-id');
+        var hidden = btn.getAttribute('data-hidden') === 'true';
+        try {
+          var res = await fetch('/api-proxy/discussion/' + encodeURIComponent(postId) + '/hidden', {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ hidden: hidden }),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          location.reload();
+        } catch (e) {
+          alert('Hide failed: ' + (e && e.message ? e.message : 'unknown'));
+        }
+      });
+    });
+  })();
+</script>
+
+<style>
+  .seminar { padding: 14px 16px; }
+  .seminar-head h2 { margin: 0; font-family: var(--font-serif); font-size: 16px; }
+  .seminar-subtitle { margin: 4px 0 12px; font-size: 13px; }
+
+  .seminar-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .seminar-item {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-base);
+  }
+  .seminar-pinned {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    background: color-mix(in srgb, var(--accent) 5%, var(--bg-base));
+  }
+  .seminar-hidden { opacity: 0.5; }
+  .seminar-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+  .seminar-did { font-family: var(--font-mono); }
+  .seminar-text { margin: 6px 0 0; font-size: 14px; line-height: 1.55; white-space: pre-wrap; }
+
+  .seminar-pin-pill,
+  .seminar-label-pill,
+  .seminar-hidden-pill {
+    display: inline-block;
+    padding: 1px 8px;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+  }
+  .seminar-pin-pill { color: var(--accent); }
+  .seminar-label-caution { color: var(--tone-caution); background: color-mix(in srgb, var(--tone-caution) 12%, transparent); }
+  .seminar-label-info { color: var(--tone-info); background: color-mix(in srgb, var(--tone-info) 12%, transparent); }
+  .seminar-label-success { color: var(--tone-success); background: color-mix(in srgb, var(--tone-success) 12%, transparent); }
+  .seminar-hidden-pill { color: var(--tone-caution); }
+
+  .seminar-controls { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+
+  .seminar-form { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .seminar-field-label { font-size: 13px; }
+  .seminar-textarea { resize: vertical; min-height: 60px; font-family: var(--font-sans); }
+  .seminar-counter { font-size: 11px; }
+  .seminar-status { font-size: 12px; min-height: 1em; }
+</style>

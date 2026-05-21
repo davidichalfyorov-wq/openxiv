@@ -1,0 +1,57 @@
+---
+import Base from '../../layouts/Base.astro';
+import SubmissionRow from '../../components/SubmissionRow.astro';
+import { serverClient } from '../../lib/api';
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+const me = await client.me().catch(() => null);
+if (!me?.authenticated) {
+  return Astro.redirect(`/auth/sign-in?return=${encodeURIComponent(Astro.url.pathname)}`, 302);
+}
+
+let submissions: Awaited<ReturnType<typeof client.mySubmissions>>['items'] = [];
+let error: string | null = null;
+try {
+  submissions = (await client.mySubmissions()).items;
+} catch (err) {
+  error = (err as Error).message;
+}
+---
+<Base title="My submissions - OpenXiv" description="Private OpenXiv submission status.">
+  <main class="container submissions-page">
+    <header class="submissions-head">
+      <div>
+        <h1 class="title-serif">Submitted Papers</h1>
+        <p class="muted">Private submission status for {me.user?.displayName ?? 'your account'}.</p>
+      </div>
+      {me.user?.handle && <a class="btn btn-sm" href={`/@${me.user.handle}?tab=submissions`}>Profile tab</a>}
+    </header>
+
+    {error && (
+      <div class="card" style="border-color: var(--tone-caution); padding: 16px;">
+        <strong>Submissions unavailable</strong>
+        <p class="muted" style="margin: 6px 0 0;">{error}</p>
+      </div>
+    )}
+
+    <div class="stack">
+      {submissions.map((submission) => <SubmissionRow submission={submission} />)}
+      {!error && submissions.length === 0 && <p class="muted">No submitted papers yet.</p>}
+    </div>
+  </main>
+</Base>
+
+<style>
+  .submissions-page { max-width: 980px; }
+  .submissions-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .submissions-head h1 { margin-bottom: 4px; }
+</style>

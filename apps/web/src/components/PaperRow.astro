@@ -1,0 +1,205 @@
+---
+import { relativeTime, truncate } from '../lib/format';
+import { formatPaperStatus } from '../lib/paper-status';
+import type { PaperSummary } from '../lib/api';
+
+interface Props {
+  paper: PaperSummary;
+}
+
+const { paper } = Astro.props;
+const href = paper.openxivUrlId ? `/abs/${paper.openxivUrlId}` : `/paper/${paper.id}`;
+const authorLine =
+  paper.authorLine ??
+  (paper.authorNames && paper.authorNames.length > 0
+    ? paper.authorNames.slice(0, 3).join(', ') + (paper.authorNames.length > 3 ? ' et al.' : '')
+    : 'OpenXiv author');
+
+const statusClass = `status-${paper.status.replace(/_/g, '-')}`;
+---
+<article class="paper-card">
+  <div class="paper-header">
+    <div class="paper-meta">
+      <span class="paper-primary-category">{paper.primaryCategory}</span>
+      {(paper.crossListings ?? []).length > 0 && (
+        <span
+          class="paper-cross-badge"
+          title={`Cross-listed: ${(paper.crossListings ?? []).join(', ')}`}
+          aria-label={`Cross-listed in ${(paper.crossListings ?? []).length} more subjects`}
+        >
+          +{ (paper.crossListings ?? []).length }
+        </span>
+      )}
+      <span class="meta-dot">·</span>
+      <span class="paper-time">{relativeTime(paper.createdAt)}</span>
+    </div>
+    
+    <span class={`paper-status ${statusClass}`}>
+      {paper.status === 'published' ? (paper.openxivId || 'Published') : formatPaperStatus(paper.status)}
+    </span>
+  </div>
+
+  <div class="paper-body">
+    {paper.thumbUrl && (
+      <div class="paper-thumb-wrapper">
+        <img
+          src={paper.thumbUrl}
+          alt=""
+          class="paper-thumb"
+          loading="lazy"
+          decoding="async"
+        />
+      </div>
+    )}
+    <div class="paper-main">
+      <h3 class="paper-title">
+        <a href={href}>{truncate(paper.title, 180)}</a>
+      </h3>
+      <p class="paper-authors">
+        by <a href={`/profile/${encodeURIComponent(paper.submitterDid)}`} class="author-link">{authorLine}</a>
+      </p>
+    </div>
+  </div>
+</article>
+
+<style>
+  .paper-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 20px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    transition: background-color 150ms ease;
+  }
+
+  .paper-card:hover {
+    background: var(--bg-hover);
+  }
+
+  .paper-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+  }
+
+  .paper-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+  }
+
+  .paper-primary-category {
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .paper-cross-badge {
+    font-size: 10px;
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-elev);
+    cursor: help;
+  }
+
+  .meta-dot {
+    opacity: 0.5;
+  }
+
+  .paper-time {
+    color: var(--text-tertiary);
+  }
+
+  .paper-status {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+  }
+
+  .status-published {
+    color: var(--accent-strong);
+  }
+
+  .status-draft {
+    color: #e67e22;
+  }
+
+  .status-pending-disclosure,
+  .status-pending-review {
+    color: #f1c40f;
+  }
+
+  .paper-body {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .paper-thumb-wrapper {
+    width: 80px;
+    height: 60px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: #fff;
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .paper-thumb {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+
+  .paper-main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .paper-title {
+    margin: 0 0 6px 0;
+    font-family: var(--font-sans);
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  .paper-title a {
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: color 120ms ease;
+  }
+
+  .paper-title a:hover {
+    color: var(--accent);
+  }
+
+  .paper-authors {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .author-link {
+    color: var(--text-primary);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 120ms ease;
+  }
+
+  .author-link:hover {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+</style>

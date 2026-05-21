@@ -1,0 +1,134 @@
+---
+import Base from '../../layouts/Base.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+---
+<Base
+  title="Submission policy — OpenXiv"
+  description="Who may submit to OpenXiv, what's accepted, AI disclosure, refusal process. Plain English."
+>
+  <main class="container-narrow">
+    <Breadcrumbs items={[{ name: 'Home', url: '/' }, { name: 'Policies', url: '/policies' }, { name: 'Submission policy', url: '/policies/submission' }]} />
+    <h1 class="title-serif">Submission policy</h1>
+    <p class="muted">Last updated 2026-05-19. Plain English.</p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Who may submit</h2>
+    <p class="body-serif">
+      Anyone with a verified identity. Independent researchers without
+      institutional backing are welcome on the same footing as people
+      affiliated with universities, research labs, or industry teams. We
+      do not require an institutional email and we do not require an
+      endorser.
+    </p>
+    <p class="body-serif">
+      Sign in with ORCID (recommended for researchers) or with a
+      did:plc through Bluesky. Either binds the submission to an
+      identifiable real person and persists across the OpenXiv App
+      View's AT-proto record set.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Scope: research, not advocacy</h2>
+    <p class="body-serif">
+      OpenXiv is an academic preprint server. We accept original
+      or review work that uses established scholarly methodology:
+      mathematical proofs, empirical studies with reproducible
+      data, formal analyses, literature reviews with traceable
+      sourcing, structured argumentation grounded in evidence.
+    </p>
+    <p class="body-serif">
+      We do not accept opinion or advocacy pieces, political
+      manifestos, personal essays, press releases, or marketing
+      material. These restrictions are content-agnostic: a
+      methodologically rigorous study of a sensitive topic
+      (mathematical analysis of conflict demographics; a
+      peer-reviewable survey of any population's outcomes; a
+      legal analysis under any specific framework) is welcome. A
+      persuasive essay on the same topic without academic
+      methodology is not.
+    </p>
+    <p class="body-serif">
+      We refuse pieces based on academic quality, never on
+      political stance. The line is methodology, not topic.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">What we accept</h2>
+    <ul class="body-serif">
+      <li>Preprints in any discipline OpenXiv covers (multidisciplinary;
+        see the category list on <a href="/submit">/submit</a>).</li>
+      <li>LaTeX source — a <code>.tex</code> file or a
+        <code>.zip</code> / <code>.tar.gz</code> bundle containing the
+        <code>.tex</code>, figures, and <code>.bib</code>.</li>
+      <li>AI-assisted work, under structured disclosure (see below).</li>
+      <li>Revisions of previously-published versions via the version
+        flow on the abstract page.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">What we don't accept</h2>
+    <ul class="body-serif">
+      <li>PDF-only uploads (temporarily disabled until the GROBID +
+        Nougat fallback ships).</li>
+      <li>Unverified or hallucinated output: hallucinated references,
+        fabricated math, "as-an-AI-language-model" boilerplate left
+        in the body without verification.</li>
+      <li>Plagiarism — verbatim or near-verbatim copy of prior work
+        without attribution.</li>
+      <li>Material already retracted by another venue for fraud,
+        misconduct, or fabrication.</li>
+      <li>Promotional content (vendor whitepapers, marketing collateral
+        styled as research).</li>
+      <li>Opinion or advocacy pieces of any political or social
+        stance — see the Scope section above for the criterion.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">AI disclosure and rules</h2>
+    <p class="body-serif">
+      Every submission selects one of four disclosure levels:
+    </p>
+    <ul class="body-serif">
+      <li><strong>None</strong> — no AI was used.</li>
+      <li><strong>Assistant</strong> — used for spell-check, light
+        copy-editing, or other narrow assistance.</li>
+      <li><strong>Co-author</strong> — used for material drafting,
+        derivations, or structured argument generation, then verified
+        by you.</li>
+      <li><strong>Primary</strong> — AI produced the bulk of the
+        manuscript; you reviewed and attest to correctness.</li>
+    </ul>
+    <p class="body-serif">
+      The disclosure also asks you to list the models used (e.g.
+      "Claude Sonnet 4.5", "GPT-4o", "DeepSeek V3") and a short note
+      on how each was used. This record is part of your AT-proto
+      submission blob.
+    </p>
+    <p class="body-serif">
+      The full set of AI-use rules — including the prohibition on
+      listing AI as an author, mandatory citation and numerical
+      verification, and the no-boilerplate rule — is in the
+      <a href="/policies/code-of-conduct">code of conduct</a>.
+      A misrepresented disclosure level or a violation of those
+      rules is grounds for refusal.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Refusal — public, specific, revisable</h2>
+    <p class="body-serif">
+      When we refuse a submission, we publish a refusal packet that
+      names the failure mode (e.g. "fabricated citations in
+      §4", "unverified numerical claim in §2.1"), points at the
+      evidence, and recommends a revision. You can resubmit a
+      corrected version. We do not ban authors for refused work.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Versioning</h2>
+    <p class="body-serif">
+      Each version gets a suffix (<code>v1</code>, <code>v2</code>, …).
+      Previous versions stay accessible at their own URLs; new
+      versions inherit the OpenXiv id and DOI of the original. A
+      changelog is required on every version after v1.
+    </p>
+
+    <p class="muted" style="margin-top: 24px;">
+      Related: <a href="/terms">Submission terms</a> ·
+      <a href="/policies/takedown">Takedown</a> ·
+      <a href="/policies">All policies</a>.
+    </p>
+  </main>
+</Base>

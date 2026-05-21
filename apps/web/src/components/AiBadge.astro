@@ -1,0 +1,17 @@
+---
+import { discloseLabel, discloseToneClass } from '../lib/format';
+
+interface Props {
+  level: 'none' | 'assistant' | 'coauthor' | 'primary';
+  compact?: boolean;
+}
+
+const { level, compact = false } = Astro.props;
+const cls = discloseToneClass(level);
+const label = discloseLabel(level);
+const glyph = level === 'none' ? '◇' : level === 'assistant' ? '✦' : level === 'coauthor' ? '✧' : '⬢';
+---
+<span class:list={['badge', cls]} title={`Disclosure level: ${label}`}>
+  <span aria-hidden="true">{glyph}</span>
+  {!compact && <span>{label}</span>}
+</span>

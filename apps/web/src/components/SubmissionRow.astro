@@ -1,0 +1,87 @@
+---
+import { relativeTime, truncate } from '../lib/format';
+import { formatPaperStatus } from '../lib/paper-status';
+import type { MySubmission } from '../lib/api';
+
+interface Props {
+  submission: MySubmission;
+}
+
+const { submission } = Astro.props;
+const href = submission.openxivUrlId ? `/abs/${submission.openxivUrlId}` : `/paper/${submission.id}`;
+const statusText = submission.feedback
+  ? submission.feedback.fixable
+    ? 'Changes requested'
+    : 'Not accepted'
+  : formatPaperStatus(submission.status);
+---
+<article class="card submission-row">
+  <div class="submission-row-top">
+    <span class="muted">
+      {submission.primaryCategory}
+      {(submission.crossListings ?? []).length > 0 && (
+        <> · +{(submission.crossListings ?? []).length} more</>
+      )}
+      {' '}· submitted {relativeTime(submission.createdAt)}
+    </span>
+    <span class={submission.feedback ? 'badge badge-tone-warning' : 'badge badge-tone-info'}>
+      {statusText}
+    </span>
+  </div>
+  <h3>
+    <a href={href}>{truncate(submission.title, 220)}</a>
+  </h3>
+  {submission.abstract && <p class="muted submission-abstract">{truncate(submission.abstract, 360)}</p>}
+  {submission.feedback && (
+    <section class="submission-feedback">
+      <div class="submission-feedback-head">
+        <strong>Moderator feedback</strong>
+        <span class="muted">{submission.feedback.issuedAt.slice(0, 10)}</span>
+      </div>
+      <p>{submission.feedback.moderatorNote}</p>
+      {submission.feedback.examples.length > 0 && (
+        <ul>
+          {submission.feedback.examples.map((example) => (
+            <li>
+              {example.section && <strong>{example.section}: </strong>}
+              <span>{example.problem}</span>
+              {example.suggestion && <span class="muted"> - {example.suggestion}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )}
+</article>
+
+<style>
+  .submission-row { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .submission-row-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  h3 { margin: 0; font-family: var(--font-serif); font-size: 20px; line-height: 1.35; }
+  h3 a { color: inherit; text-decoration: none; }
+  h3 a:hover { text-decoration: underline; }
+  .submission-abstract { margin: 0; }
+  .submission-feedback {
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .submission-feedback-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .submission-feedback p { margin: 0; }
+  .submission-feedback ul { margin: 0; padding-left: 18px; }
+  .submission-feedback li { margin: 4px 0; }
+</style>

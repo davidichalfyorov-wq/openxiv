@@ -1,0 +1,155 @@
+---
+/**
+ * Typed endorsement vocabulary. Emitted as a DefinedTermSet so that
+ * tools indexing OpenXiv (Crossref, OpenAIRE, answer engines) can
+ * resolve our endorsement verbs to a single controlled vocabulary
+ * with stable @ids rather than guessing semantics from free text.
+ *
+ * Each term carries a termCode equal to the on-the-wire enum value
+ * used in app.openxiv.endorsement records so consumers can match
+ * structured data back to the AT-proto record they were lifted from.
+ */
+import Base from '../layouts/Base.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import { safeJsonLd, ORG_ID } from '../lib/jsonld';
+
+const publicBase = 'https://openxiv.net';
+const setId = `${publicBase}/vocabulary#endorsement-verbs`;
+
+interface VocabTerm {
+  termCode: string;
+  name: string;
+  description: string;
+}
+
+const terms: VocabTerm[] = [
+  {
+    termCode: 'verified-derivation',
+    name: 'Verified derivation',
+    description:
+      'The endorser worked through the paper’s central derivation, step by step, and the algebra and assumptions hold. This is the strongest mathematical endorsement on OpenXiv.',
+  },
+  {
+    termCode: 'reproduced-result',
+    name: 'Reproduced result',
+    description:
+      'The endorser independently re-ran the experiment, simulation, or numerical pipeline described in the paper and obtained results consistent with the reported claims, within the stated tolerance.',
+  },
+  {
+    termCode: 'checked-references',
+    name: 'Checked references',
+    description:
+      'The endorser audited the bibliography: every cited source resolves, every quoted figure or claim attributed to a prior work matches what that prior work actually says, and there are no fabricated entries.',
+  },
+  {
+    termCode: 'useful-background',
+    name: 'Useful background',
+    description:
+      'The endorser found the paper a useful pedagogical or contextual reference, even if they did not verify every result. A lower-stakes signal than verification but more specific than a generic like.',
+  },
+  {
+    termCode: 'important-but-flawed',
+    name: 'Important but flawed',
+    description:
+      'The endorser thinks the paper raises a question worth engaging with but contains identifiable defects (methodological, derivational, or evidentiary). The endorsement is expected to cite the defect.',
+  },
+  {
+    termCode: 'needs-correction',
+    name: 'Needs correction',
+    description:
+      'The endorser has identified a concrete error and recommends the author publish a corrected version. The endorsement should name the specific section, equation, or claim that is wrong.',
+  },
+];
+
+const termSetLd = {
+  '@context': 'https://schema.org',
+  '@type': 'DefinedTermSet',
+  '@id': setId,
+  name: 'OpenXiv typed endorsement vocabulary',
+  url: `${publicBase}/vocabulary`,
+  publisher: { '@id': ORG_ID },
+  inLanguage: 'en',
+  hasDefinedTerm: terms.map((t) => ({
+    '@type': 'DefinedTerm',
+    '@id': `${setId}/${t.termCode}`,
+    name: t.name,
+    description: t.description,
+    termCode: t.termCode,
+    inDefinedTermSet: { '@id': setId },
+  })),
+};
+---
+<Base
+  title="Endorsement vocabulary — OpenXiv"
+  description="Typed endorsement verbs used on OpenXiv: verified derivation, reproduced result, checked references, useful background, important but flawed, needs correction."
+>
+  <script slot="head" is:inline type="application/ld+json" set:html={safeJsonLd(termSetLd)} />
+
+  <main class="container-narrow">
+    <Breadcrumbs items={[{ name: 'Home', url: '/' }, { name: 'Vocabulary', url: '/vocabulary' }]} />
+    <h1 class="title-serif">Endorsement vocabulary</h1>
+    <p class="body-serif">
+      OpenXiv endorsements are typed verbs, not generic likes. An endorser
+      picks a specific verb that names what they actually did with the
+      paper, and that verb is what shows up on the paper page, in the
+      Trust Passport, and on AT-proto records. The full controlled
+      vocabulary is below; each term has a stable URI so external tools
+      can resolve it.
+    </p>
+    <p class="muted">
+      Set <code>@id</code>: <code>{setId}</code>
+    </p>
+
+    <dl class="vocab-list">
+      {terms.map((t) => (
+        <div class="vocab-item card" id={t.termCode}>
+          <dt>
+            <strong class="vocab-name">{t.name}</strong>
+            <code class="vocab-code">{t.termCode}</code>
+          </dt>
+          <dd class="body-serif">{t.description}</dd>
+        </div>
+      ))}
+    </dl>
+
+    <p class="muted" style="margin-top: 28px;">
+      Related: <a href="/glossary">Glossary</a> · <a href="/about">About</a> ·
+      <a href="/policies/code-of-conduct">Code of conduct</a>.
+    </p>
+  </main>
+</Base>
+
+<style>
+  .vocab-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 20px 0 0;
+    padding: 0;
+  }
+  .vocab-item {
+    padding: 14px 16px;
+    margin: 0;
+  }
+  .vocab-item dt {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .vocab-name {
+    font-family: var(--font-serif);
+    font-size: 17px;
+  }
+  .vocab-code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-tertiary);
+  }
+  .vocab-item dd {
+    margin: 0;
+    font-size: 14.5px;
+    line-height: 1.55;
+  }
+</style>

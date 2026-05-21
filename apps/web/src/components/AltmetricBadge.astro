@@ -1,0 +1,205 @@
+---
+interface Props {
+  doi: string | null | undefined;
+}
+
+const { doi } = Astro.props;
+const normalizedDoi = doi?.trim() ?? '';
+const hasDoi = normalizedDoi.length > 0;
+const rootId = `altmetric-${Buffer.from(normalizedDoi || 'none')
+  .toString('base64url')
+  .replace(/[^A-Za-z0-9_-]/g, '')
+  .slice(0, 24)}`;
+---
+
+<div id={rootId} class="altmetric-optin" data-altmetric-root data-doi={normalizedDoi}>
+  <button
+    type="button"
+    class="altmetric-toggle"
+    data-altmetric-toggle
+    disabled={!hasDoi}
+    title={hasDoi ? 'Show Altmetric badge' : 'Altmetric requires a DOI'}
+  >
+    <span aria-hidden="true">›</span> Show alt-metrics
+  </button>
+
+  <div class="altmetric-consent" data-altmetric-prompt hidden>
+    <p>
+      Loading Altmetric shares DOI with altmetric.com + sets third-party cookies.
+    </p>
+    <div class="altmetric-actions">
+      <button type="button" class="btn btn-sm btn-primary" data-altmetric-choice="session">Show once</button>
+      <button type="button" class="btn btn-sm" data-altmetric-choice="always">Show always</button>
+      <button type="button" class="btn btn-sm" data-altmetric-choice="none">Cancel</button>
+    </div>
+  </div>
+
+  <div class="altmetric-slot" data-altmetric-slot aria-live="polite"></div>
+</div>
+
+{hasDoi && (
+  <script is:inline>
+    (function () {
+      var COOKIE_NAME = 'openxiv_altmetric_opt';
+      var SCRIPT_ID = 'openxiv-altmetric-embed-js';
+      var SCRIPT_SRC = 'https://d1bxh8uas1mnw7.cloudfront.net/assets/embed.js';
+      var scriptEl = document.currentScript;
+      var root =
+        scriptEl &&
+        scriptEl.previousElementSibling &&
+        scriptEl.previousElementSibling.matches('[data-altmetric-root]')
+          ? scriptEl.previousElementSibling
+          : null;
+      if (!root) return;
+      var doi = root.getAttribute('data-doi') || '';
+      var toggle = root.querySelector('[data-altmetric-toggle]');
+      var prompt = root.querySelector('[data-altmetric-prompt]');
+      var slot = root.querySelector('[data-altmetric-slot]');
+      if (!toggle || !prompt || !slot) return;
+
+      function dntOn() {
+        try {
+          if (navigator.doNotTrack === '1' || window.doNotTrack === '1') return true;
+          if (navigator.globalPrivacyControl === true) return true;
+        } catch (_e) {}
+        return false;
+      }
+
+      function readOpt() {
+        var m = new RegExp('(?:^|;\\s*)' + COOKIE_NAME + '=([^;]+)').exec(document.cookie);
+        return m ? decodeURIComponent(m[1]) : null;
+      }
+
+      function writeOpt(value) {
+        var parts = [
+          COOKIE_NAME + '=' + encodeURIComponent(value),
+          'Path=/',
+          'SameSite=Lax',
+          'Secure',
+        ];
+        if (value === 'always') parts.push('Max-Age=' + 60 * 60 * 24 * 365);
+        document.cookie = parts.join('; ');
+      }
+
+      function renderEmbedShell() {
+        slot.textContent = '';
+        var embed = document.createElement('div');
+        embed.className = 'altmetric-embed';
+        embed.setAttribute('data-badge-type', 'donut');
+        embed.setAttribute('data-doi', doi);
+        slot.appendChild(embed);
+      }
+
+      function initAltmetric() {
+        try {
+          if (typeof window._altmetric_embed_init === 'function') {
+            window._altmetric_embed_init(slot);
+          }
+        } catch (_e) {}
+      }
+
+      function loadAltmetric() {
+        if (dntOn()) return;
+        renderEmbedShell();
+        var existing = document.getElementById(SCRIPT_ID);
+        if (existing) {
+          initAltmetric();
+          return;
+        }
+        var script = document.createElement('script');
+        script.id = SCRIPT_ID;
+        script.async = true;
+        script.src = SCRIPT_SRC;
+        script.onload = initAltmetric;
+        script.onerror = function () {
+          slot.textContent = '';
+        };
+        document.head.appendChild(script);
+      }
+
+      function disableForDnt() {
+        toggle.setAttribute('disabled', 'disabled');
+        toggle.setAttribute('title', 'Do Not Track is enabled; Altmetric opt-in is disabled.');
+        prompt.hidden = true;
+      }
+
+      if (dntOn()) {
+        disableForDnt();
+        return;
+      }
+
+      toggle.addEventListener('click', function () {
+        if (dntOn()) {
+          disableForDnt();
+          return;
+        }
+        var opt = readOpt();
+        if (opt === 'always' || opt === 'session') {
+          prompt.hidden = true;
+          loadAltmetric();
+          return;
+        }
+        prompt.hidden = false;
+      });
+
+      prompt.querySelectorAll('[data-altmetric-choice]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var choice = btn.getAttribute('data-altmetric-choice');
+          if (choice === 'session' || choice === 'always') {
+            writeOpt(choice);
+            prompt.hidden = true;
+            loadAltmetric();
+            return;
+          }
+          writeOpt('none');
+          prompt.hidden = true;
+        });
+      });
+    })();
+  </script>
+)}
+
+<style>
+  .altmetric-optin {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .altmetric-toggle {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    padding: 0;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .altmetric-toggle:disabled {
+    color: var(--text-tertiary);
+    cursor: not-allowed;
+  }
+  .altmetric-consent {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-base);
+    padding: 10px 12px;
+    max-width: 520px;
+  }
+  .altmetric-consent p {
+    margin: 0 0 8px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .altmetric-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .altmetric-slot {
+    min-height: 0;
+  }
+</style>

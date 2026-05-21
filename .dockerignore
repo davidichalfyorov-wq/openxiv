@@ -1,0 +1,36 @@
+# Build artifacts
+**/node_modules
+**/dist
+**/.astro
+**/.turbo
+**/.cache
+# Incremental TSC bookkeeping — if these get copied into the image,
+# tsc thinks the previous build is still fresh and emits nothing, which
+# leaves `dist/` empty and breaks Vite's resolver of @openxiv/shared.
+**/*.tsbuildinfo
+
+# Local dev
+**/.env
+**/.env.local
+**/.env.development
+**/.env.production
+**/coverage
+**/playwright-report
+**/test-results
+
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# Docs / legacy
+_legacy
+docs
+*.md
+
+# Editor / OS
+.idea
+.vscode
+**/.DS_Store
+**/Thumbs.db
+*.log

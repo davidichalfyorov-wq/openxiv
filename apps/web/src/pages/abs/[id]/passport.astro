@@ -1,0 +1,967 @@
+---
+import Base from '../../../layouts/Base.astro';
+import { serverClient, type SignedTrustPassportBundle } from '../../../lib/api';
+
+const id = Astro.params.id;
+if (!id) return new Response('Missing id', { status: 400 });
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let paper: Awaited<ReturnType<typeof client.getPaper>> | null = null;
+let passport: SignedTrustPassportBundle | null = null;
+let me: Awaited<ReturnType<typeof client.me>> | null = null;
+let error: string | null = null;
+try {
+  const [paperRes, passportRes, meRes] = await Promise.all([
+    client.getPaper(id),
+    client.getPaperPassport(id),
+    client.me().catch(() => ({ authenticated: false }) as Awaited<ReturnType<typeof client.me>>),
+  ]);
+  paper = paperRes;
+  passport = passportRes;
+  me = meRes;
+} catch (err) {
+  error = (err as Error).message;
+}
+
+const paperUrlId = paper?.openxivUrlId ?? paper?.id ?? id;
+const absPath = `/abs/${paperUrlId}`;
+const rawPath = `${absPath}/passport.json`;
+const disputePath = `${absPath}/passport/dispute`;
+const disputeResponsePath = `${absPath}/passport/dispute-response`;
+const disputeStatusPath = `${absPath}/passport/dispute-status`;
+const verifyPath = `${absPath}/passport/verify`;
+const disputeStatus = Astro.url.searchParams.get('dispute');
+const responseStatus = Astro.url.searchParams.get('response');
+const laneStatusUpdate = Astro.url.searchParams.get('status');
+const verifyStatus = Astro.url.searchParams.get('verify');
+const verifyDigest = Astro.url.searchParams.get('digest');
+const verifyChangedLanes = (Astro.url.searchParams.get('changedLanes') ?? '')
+  .split(',')
+  .map((lane) => lane.trim())
+  .filter(Boolean);
+const verifyMode = Astro.url.searchParams.get('mode');
+const verifyBaselineSignature = Astro.url.searchParams.get('baselineSignature');
+const verifyHistoryDelta = parseIntegerParam(Astro.url.searchParams.get('historyDelta'));
+const verifyPublicDisputeDelta = parseIntegerParam(Astro.url.searchParams.get('publicDisputeDelta'));
+const verifyExternalAttestationDelta = parseIntegerParam(
+  Astro.url.searchParams.get('externalAttestationDelta'),
+);
+const canAnswerDisputes =
+  Boolean(me?.authenticated && paper) &&
+  (me?.user?.did === paper?.submitterDid ||
+    me?.user?.role === 'moderator' ||
+    me?.user?.role === 'admin');
+const publicDisputeResponses = passport?.publicDisputeResponses ?? [];
+
+const statusLabels: Record<string, string> = {
+  green: 'Strong',
+  yellow: 'Partial',
+  red: 'Needs attention',
+  pending: 'Pending',
+};
+
+const laneLabels: Record<string, string> = {
+  transparency: 'Transparency',
+  identity: 'Identity',
+  provenance: 'Provenance',
+  citations: 'Citations',
+  math: 'Math',
+  integrity: 'Integrity',
+  socialReview: 'Social Review',
+};
+
+const historyLabels: Record<string, string> = {
+  public_dispute: 'Public dispute',
+  dispute_response: 'Response',
+  external_attestation: 'External attestation',
+};
+
+const itemStatusLabels: Record<string, string> = {
+  pass: 'Verified',
+  fail: 'Needs attention',
+  pending: 'Pending',
+  not_applicable: 'Not applicable',
+};
+
+const laneHistoryStateLabels: Record<string, string> = {
+  computed: 'OpenXiv checks',
+  externally_attested: 'Externally attested',
+  contested: 'Contested',
+  answered_contestation: 'Response filed',
+  contested_and_attested: 'Contested + attested',
+};
+
+function parseIntegerParam(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function signedDelta(value: number | null): string | null {
+  if (value === null) return null;
+  return value > 0 ? `+${value}` : String(value);
+}
+---
+
+<Base
+  title={paper ? `${paper.title} — Trust Passport` : 'Trust Passport'}
+  description="Signed OpenXiv Trust Passport JSON-LD artifact"
+>
+  <main class="passport-shell">
+    {
+      error && (
+        <article class="card" style="border-color: var(--tone-caution);">
+          <strong>Trust Passport unavailable</strong>
+          <p class="muted">{error}</p>
+        </article>
+      )
+    }
+
+    {
+      paper && passport && (
+        <>
+          <header class="passport-head">
+            <p class="muted passport-trail">
+              <a href={absPath}>← Back to paper</a>
+            </p>
+            <h1 class="title-serif">Trust Passport</h1>
+            <p class="passport-title">{paper.title}</p>
+            <div class="passport-actions">
+              <a class="btn" href={rawPath}>
+                Raw JSON-LD
+              </a>
+              <form method="post" action={verifyPath}>
+                <input type="hidden" name="baselineDigest" value={passport.semanticDigest} />
+                <input
+                  type="hidden"
+                  name="baselinePassport"
+                  value={JSON.stringify(passport)}
+                />
+                <button class="btn btn-ghost" type="submit">
+                  Verify yourself
+                </button>
+              </form>
+            </div>
+            {verifyStatus === 'matched' && (
+              <p class="passport-notice passport-notice-ok">
+                Checks reran successfully. Signature is valid and the evidence digest still matches.
+              </p>
+            )}
+            {verifyStatus === 'changed' && (
+              <div class="passport-notice passport-notice-warn">
+                <p>
+                  Checks reran successfully, but the live evidence digest changed since this view
+                  loaded.
+                </p>
+                {(verifyChangedLanes.length > 0 ||
+                  verifyHistoryDelta !== null ||
+                  verifyPublicDisputeDelta !== null ||
+                  verifyExternalAttestationDelta !== null) && (
+                  <div class="passport-verify-delta">
+                    {verifyChangedLanes.length > 0 && (
+                      <span>
+                        changed lane{verifyChangedLanes.length === 1 ? '' : 's'}:{' '}
+                        {verifyChangedLanes
+                          .map((lane) => laneLabels[lane] ?? lane)
+                          .join(', ')}
+                      </span>
+                    )}
+                    {verifyHistoryDelta !== null && (
+                      <span>history {signedDelta(verifyHistoryDelta)}</span>
+                    )}
+                    {verifyPublicDisputeDelta !== null && (
+                      <span>public disputes {signedDelta(verifyPublicDisputeDelta)}</span>
+                    )}
+                    {verifyExternalAttestationDelta !== null && (
+                      <span>
+                        external attestations {signedDelta(verifyExternalAttestationDelta)}
+                      </span>
+                    )}
+                    {verifyMode === 'bundle' && verifyBaselineSignature && (
+                      <span>baseline signature {verifyBaselineSignature}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {verifyStatus === 'failed' && (
+              <p class="passport-notice passport-notice-warn">
+                Verification failed. Refresh and try again, or inspect the raw JSON-LD artifact.
+              </p>
+            )}
+            {verifyDigest && (
+              <p class="muted passport-digest">
+                <code>{verifyDigest}</code>
+              </p>
+            )}
+          </header>
+
+          <section class="passport-proof card">
+            <h2>Signed artifact</h2>
+            <dl>
+              <div>
+                <dt>Issuer</dt>
+                <dd>
+                  <code>{passport.issuer}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Verification method</dt>
+                <dd>
+                  <code>{passport.proof.verificationMethod}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Generated</dt>
+                <dd>{new Date(passport.generatedAt).toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt>Evidence digest</dt>
+                <dd>
+                  <code>{passport.semanticDigest}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>Signature</dt>
+                <dd>
+                  <code>{passport.signature}</code>
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="passport-lanes" aria-label="Trust Passport lanes">
+            {passport.checks.map((check) => (
+              <details class={`card passport-lane passport-${check.status}`} open>
+                <summary>
+                  <span>
+                    <strong>{laneLabels[check.lane] ?? check.lane}</strong>
+                    <span class="muted">{check.checker}</span>
+                  </span>
+                  <span class="passport-pill">{statusLabels[check.status] ?? check.status}</span>
+                </summary>
+                <div class="passport-evidence-summary" aria-label="Evidence summary">
+                  <strong>Evidence summary</strong>
+                  <span>{laneHistoryStateLabels[check.summary.historyState] ?? check.summary.historyState}</span>
+                  <span>{check.summary.passedItems} verified</span>
+                  {check.summary.attentionItems > 0 && (
+                    <span>{check.summary.attentionItems} need attention</span>
+                  )}
+                  {check.summary.pendingItems > 0 && (
+                    <span>{check.summary.pendingItems} pending</span>
+                  )}
+                  {check.summary.notApplicableItems > 0 && (
+                    <span>{check.summary.notApplicableItems} not applicable</span>
+                  )}
+                  {check.summary.unresolvedDisputeCount > 0 && (
+                    <span>{check.summary.unresolvedDisputeCount} open disputes</span>
+                  )}
+                  {check.summary.highlightedDisputeCount > 0 && (
+                    <span>{check.summary.highlightedDisputeCount} highlighted disputes</span>
+                  )}
+                  {check.summary.responseCount > 0 && (
+                    <span>{check.summary.responseCount} responses</span>
+                  )}
+                  {check.summary.verifiedExternalAttestationCount > 0 && (
+                    <span>
+                      {check.summary.verifiedExternalAttestationCount} verified external
+                      signatures
+                    </span>
+                  )}
+                  {check.summary.unverifiedExternalAttestationCount > 0 && (
+                    <span>
+                      {check.summary.unverifiedExternalAttestationCount} unverified attestations
+                    </span>
+                  )}
+                  {check.summary.lastActivityAt && (
+                    <span>updated {new Date(check.summary.lastActivityAt).toLocaleString()}</span>
+                  )}
+                </div>
+                {check.summary.topAction && (
+                  <p class="muted passport-top-action">{check.summary.topAction}</p>
+                )}
+                {check.nextActions.length > 0 && (
+                  <div class="passport-actions-needed">
+                    <strong>Next actions</strong>
+                    <ul>
+                      {check.nextActions.map((action) => (
+                        <li>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <ul>
+                  {check.items.map((item) => (
+                    <li class={item.passed ? 'passport-item-pass' : 'passport-item-fail'}>
+                      <strong>
+                        {item.label}{' '}
+                        <span>{itemStatusLabels[item.status ?? ''] ?? item.status}</span>
+                      </strong>
+                      <span class="muted">{item.note}</span>
+                      {(item.ref ||
+                        item.resolved ||
+                        item.via ||
+                        item.reason ||
+                        item.category ||
+                        item.section ||
+                        item.snippet) && (
+                        <span class="passport-evidence">
+                          {item.category && <em>{item.category.replaceAll('_', ' ')}</em>}
+                          {item.section && item.anchor ? (
+                            <a class="passport-section-link" href={`${absPath}#${item.anchor}`}>
+                              <code>{item.section}</code>
+                            </a>
+                          ) : item.section ? (
+                            <code>{item.section}</code>
+                          ) : null}
+                          {item.ref && <code>{item.ref}</code>}
+                          {item.resolved ? (
+                            <>
+                              <span aria-hidden="true">→</span>
+                              <code>{item.resolved}</code>
+                            </>
+                          ) : item.ref ? (
+                            <span>unresolved</span>
+                          ) : null}
+                          {item.via && <em>{item.via}</em>}
+                          {item.confidence && <em>{item.confidence} confidence</em>}
+                          {item.snippet && <small class="passport-snippet">{item.snippet}</small>}
+                          {item.reason && <small>{item.reason}</small>}
+                        </span>
+                      )}
+                      {item.action && <span class="muted">Action: {item.action}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ))}
+          </section>
+
+          <section class="card passport-timeline" aria-label="Trust history">
+            <h2>Trust history</h2>
+            {passport.history.length === 0 ? (
+              <p class="muted">No longitudinal trust events have been attached yet.</p>
+            ) : (
+              <ol>
+                {passport.history.map((event) => (
+                  <li>
+                    <span class="passport-timeline-meta">
+                      <strong>{historyLabels[event.type] ?? event.type}</strong>
+                      <em>{laneLabels[event.lane] ?? event.lane}</em>
+                      <time datetime={event.createdAt}>
+                        {new Date(event.createdAt).toLocaleString()}
+                      </time>
+                    </span>
+                    <p>{event.statement ?? event.text}</p>
+                    <span class="muted">
+                      {event.actorDid}
+                      {event.targetRef && <> · {event.targetRef}</>}
+                      {event.relatedId && <> · replies to {event.relatedId}</>}
+                    </span>
+                    {event.signature && <code>{event.signature}</code>}
+                    {event.verificationUrl && (
+                      <a href={event.verificationUrl}>Verification source</a>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+
+          <section class="passport-history">
+            <article class="card">
+              <h2>Public disputes</h2>
+              {disputeStatus === 'created' && (
+                <p class="passport-notice passport-notice-ok">Dispute added to this Passport.</p>
+              )}
+              {disputeStatus === 'invalid' && (
+                <p class="passport-notice passport-notice-warn">
+                  Choose a lane and enter at least 20 characters.
+                </p>
+              )}
+              {disputeStatus === 'failed' && (
+                <p class="passport-notice passport-notice-warn">
+                  Could not add the dispute. Sign in and try again.
+                </p>
+              )}
+              {responseStatus === 'created' && (
+                <p class="passport-notice passport-notice-ok">Response added to this Passport.</p>
+              )}
+              {responseStatus === 'invalid' && (
+                <p class="passport-notice passport-notice-warn">
+                  Choose a dispute and enter at least 20 characters.
+                </p>
+              )}
+              {responseStatus === 'failed' && (
+                <p class="passport-notice passport-notice-warn">
+                  Could not add the response. Only the submitter, moderators, or admins can answer
+                  disputes.
+                </p>
+              )}
+              {laneStatusUpdate === 'updated' && (
+                <p class="passport-notice passport-notice-ok">Dispute status updated.</p>
+              )}
+              {laneStatusUpdate === 'invalid' && (
+                <p class="passport-notice passport-notice-warn">
+                  Choose a valid dispute status.
+                </p>
+              )}
+              {laneStatusUpdate === 'failed' && (
+                <p class="passport-notice passport-notice-warn">
+                  Could not update the dispute status. Only the submitter, moderators, or admins
+                  can do that.
+                </p>
+              )}
+              {passport.publicDisputes.length === 0 ? (
+                <p class="muted">No public lane disputes have been filed.</p>
+              ) : (
+                <ul class="dispute-list">
+                  {passport.publicDisputes.map((dispute) => (
+                    <li>
+                      <strong>{laneLabels[dispute.lane] ?? dispute.lane}</strong>
+                      {dispute.targetRef && <code>{dispute.targetRef}</code>}
+                      <p>{dispute.text}</p>
+                      <span class="muted">
+                        {dispute.authorDid} · {new Date(dispute.createdAt).toLocaleString()}
+                      </span>
+                      {canAnswerDisputes && (
+                        <form
+                          class="dispute-status-form"
+                          method="post"
+                          action={disputeStatusPath}
+                        >
+                          <input type="hidden" name="disputeId" value={dispute.id} />
+                          <button class="btn btn-sm btn-ghost" type="submit" name="status" value="highlighted">
+                            Highlight
+                          </button>
+                          <button class="btn btn-sm btn-ghost" type="submit" name="status" value="resolved">
+                            Mark resolved
+                          </button>
+                          {dispute.status !== 'open' && (
+                            <button class="btn btn-sm btn-ghost" type="submit" name="status" value="open">
+                              Reopen
+                            </button>
+                          )}
+                        </form>
+                      )}
+                      {publicDisputeResponses
+                        .filter((response) => response.disputeId === dispute.id)
+                        .map((response) => (
+                          <div class="dispute-response">
+                            <strong>Response</strong>
+                            <p>{response.text}</p>
+                            <span class="muted">
+                              {response.authorDid} · {new Date(response.createdAt).toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      {canAnswerDisputes && (
+                        <form
+                          class="dispute-response-form"
+                          method="post"
+                          action={disputeResponsePath}
+                        >
+                          <input type="hidden" name="disputeId" value={dispute.id} />
+                          <label>
+                            Response
+                            <textarea
+                              name="text"
+                              minlength="20"
+                              maxlength="2000"
+                              rows="3"
+                              required
+                            />
+                          </label>
+                          <button class="btn btn-sm" type="submit">
+                            Respond
+                          </button>
+                        </form>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {me?.authenticated ? (
+                <form class="dispute-form" method="post" action={disputePath}>
+                  <label>
+                    Lane
+                    <select name="lane" required>
+                      {passport.checks.map((check) => (
+                        <option value={check.lane}>{laneLabels[check.lane] ?? check.lane}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Target
+                    <input
+                      name="targetRef"
+                      type="text"
+                      placeholder="citation [3], section 2.1, theorem 4"
+                    />
+                  </label>
+                  <label>
+                    Challenge
+                    <textarea name="text" minlength="20" maxlength="2000" rows="4" required />
+                  </label>
+                  <button class="btn" type="submit">
+                    File public dispute
+                  </button>
+                </form>
+              ) : (
+                <p class="muted dispute-signin">
+                  <a href="/auth/sign-in">Sign in</a> to file a lane dispute.
+                </p>
+              )}
+            </article>
+            <article class="card">
+              <h2>External attestations</h2>
+              {passport.externalAttestations.length === 0 ? (
+                <p class="muted">No external signed attestations are attached yet.</p>
+              ) : (
+                <ul class="attestation-list">
+                  {passport.externalAttestations.map((attestation) => (
+                    <li>
+                      <strong>{laneLabels[attestation.lane] ?? attestation.lane}</strong>
+                      <p>{attestation.statement}</p>
+                      <span class="muted">
+                        {attestation.issuer} · {new Date(attestation.createdAt).toLocaleString()}
+                      </span>
+                      <span
+                        class={`attestation-verify ${attestation.signatureVerified ? 'attestation-verified' : 'attestation-unverified'}`}
+                      >
+                        {attestation.signatureVerified ? 'signature verified' : 'signature unverified'}
+                      </span>
+                      <code>{attestation.signature}</code>
+                      {attestation.verificationUrl && (
+                        <a href={attestation.verificationUrl}>Source</a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
+          </section>
+        </>
+      )
+    }
+  </main>
+</Base>
+
+<style>
+  .passport-shell {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 0 18px 56px;
+  }
+  .passport-head {
+    padding: 24px 0 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .passport-trail {
+    margin: 0 0 8px;
+    font-size: 13px;
+  }
+  .passport-head h1 {
+    margin: 0;
+    font-size: 34px;
+  }
+  .passport-title {
+    margin: 8px 0 0;
+    max-width: 760px;
+    font-size: 17px;
+    line-height: 1.45;
+  }
+  .passport-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+  .passport-actions form {
+    margin: 0;
+  }
+  .passport-digest {
+    margin-top: 8px !important;
+    overflow-wrap: anywhere;
+  }
+  .passport-proof {
+    margin-top: 22px;
+  }
+  .passport-proof h2,
+  .passport-timeline h2,
+  .passport-history h2 {
+    margin: 0 0 12px;
+    font-family: var(--font-serif);
+    font-size: 17px;
+  }
+  .passport-proof dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0;
+  }
+  .passport-proof dt {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .passport-proof dd {
+    margin: 4px 0 0;
+    overflow-wrap: anywhere;
+  }
+  .passport-lanes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+  }
+  .passport-lane summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+    list-style: none;
+  }
+  .passport-lane summary::-webkit-details-marker {
+    display: none;
+  }
+  .passport-lane summary span:first-child {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .passport-evidence-summary {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    font-size: 12px;
+  }
+  .passport-evidence-summary > strong {
+    flex-basis: 100%;
+    color: var(--text-secondary);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .passport-evidence-summary span {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 8px;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--bg-muted) 60%, transparent);
+  }
+  .passport-top-action {
+    margin: 8px 0 0 !important;
+    font-size: 13px;
+  }
+  .passport-pill {
+    flex: 0 0 auto;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .passport-green .passport-pill {
+    color: var(--tone-success);
+  }
+  .passport-yellow .passport-pill {
+    color: var(--tone-info);
+  }
+  .passport-red .passport-pill {
+    color: var(--tone-caution);
+  }
+  .passport-pending .passport-pill {
+    color: var(--text-secondary);
+  }
+  .passport-lane ul {
+    list-style: none;
+    padding: 0;
+    margin: 14px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .passport-actions-needed {
+    margin-top: 12px;
+    padding: 10px;
+    border: 1px solid color-mix(in srgb, var(--tone-info) 40%, var(--border));
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--tone-info) 7%, transparent);
+  }
+  .passport-actions-needed strong {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 13px;
+  }
+  .passport-actions-needed ul {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 4px;
+    font-size: 13px;
+  }
+  .passport-lane li {
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+  .passport-lane li strong {
+    display: block;
+    font-size: 14px;
+  }
+  .passport-lane li strong span {
+    display: inline;
+    margin-left: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .passport-lane li span {
+    display: block;
+    margin-top: 3px;
+    font-size: 13px;
+  }
+  .passport-lane li .passport-evidence {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    margin-top: 7px;
+    color: var(--text-secondary);
+  }
+  .passport-evidence code {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px 5px;
+    background: color-mix(in srgb, var(--bg-muted) 72%, transparent);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+  .passport-section-link {
+    color: inherit;
+    text-decoration: none;
+  }
+  .passport-section-link:hover code {
+    border-color: var(--tone-info);
+  }
+  .passport-evidence em {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-style: normal;
+    font-size: 12px;
+  }
+  .passport-evidence small {
+    flex-basis: 100%;
+    font-size: 12px;
+  }
+  .passport-evidence .passport-snippet {
+    border-left: 2px solid var(--border);
+    padding-left: 8px;
+    color: var(--text-primary);
+  }
+  .passport-item-pass strong {
+    color: var(--tone-success);
+  }
+  .passport-item-fail strong {
+    color: var(--tone-caution);
+  }
+  .passport-timeline {
+    margin-top: 18px;
+  }
+  .passport-timeline ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 12px;
+  }
+  .passport-timeline li {
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+  .passport-timeline li:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .passport-timeline-meta {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 13px;
+  }
+  .passport-timeline-meta em {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-style: normal;
+    color: var(--text-secondary);
+  }
+  .passport-timeline-meta time {
+    color: var(--text-secondary);
+  }
+  .passport-timeline p {
+    margin: 6px 0 4px;
+  }
+  .passport-timeline code {
+    display: block;
+    margin-top: 7px;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+  }
+  .passport-history {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 18px;
+  }
+  .passport-history p {
+    margin: 0;
+  }
+  .passport-notice {
+    margin-bottom: 10px !important;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+  }
+  .passport-notice p {
+    margin: 0;
+  }
+  .passport-verify-delta {
+    display: flex;
+    gap: 7px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .passport-verify-delta span {
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 12px;
+  }
+  .passport-notice-ok {
+    border-color: color-mix(in srgb, var(--tone-success) 50%, var(--border));
+    color: var(--tone-success);
+  }
+  .passport-notice-warn {
+    border-color: color-mix(in srgb, var(--tone-caution) 50%, var(--border));
+    color: var(--tone-caution);
+  }
+  .dispute-list,
+  .attestation-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .dispute-list li,
+  .attestation-list li {
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+  .dispute-list code {
+    margin-left: 8px;
+    font-size: 12px;
+  }
+  .dispute-list p {
+    margin: 6px 0 !important;
+  }
+  .attestation-list p {
+    margin: 6px 0 !important;
+  }
+  .attestation-verify {
+    display: inline-flex;
+    width: fit-content;
+    margin-top: 7px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .attestation-verified {
+    color: var(--tone-success);
+  }
+  .attestation-unverified {
+    color: var(--tone-caution);
+  }
+  .attestation-list code {
+    display: block;
+    margin-top: 8px;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+  }
+  .dispute-form,
+  .dispute-response-form,
+  .dispute-status-form {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .dispute-status-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .dispute-form label,
+  .dispute-response-form label {
+    display: grid;
+    gap: 5px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .dispute-form select,
+  .dispute-form input,
+  .dispute-form textarea,
+  .dispute-response-form textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 9px;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font: inherit;
+  }
+  .dispute-response {
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid color-mix(in srgb, var(--tone-success) 35%, var(--border));
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--tone-success) 7%, transparent);
+  }
+  .dispute-response strong {
+    display: block;
+    font-size: 13px;
+  }
+  .dispute-response-form {
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+  }
+  .dispute-signin {
+    margin-top: 14px !important;
+  }
+  .passport-history pre {
+    overflow-x: auto;
+    margin: 0;
+    font-size: 12px;
+  }
+  @media (max-width: 760px) {
+    .passport-proof dl,
+    .passport-lanes,
+    .passport-history {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

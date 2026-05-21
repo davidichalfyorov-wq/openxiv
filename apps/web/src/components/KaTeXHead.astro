@@ -1,0 +1,253 @@
+---
+const katexCssHref = 'https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css';
+---
+
+<link
+  rel="preload"
+  as="style"
+  href={katexCssHref}
+  media="(max-width: 768px)"
+  crossorigin="anonymous"
+  onload="this.onload=null;this.rel='stylesheet'"
+/>
+<link rel="stylesheet" href={katexCssHref} media="(min-width: 769px)" crossorigin="anonymous" />
+<noscript><link rel="stylesheet" href={katexCssHref} crossorigin="anonymous" /></noscript>
+<script
+  defer
+  src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"
+  crossorigin="anonymous"></script>
+<script
+  defer
+  src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/contrib/auto-render.min.js"
+  crossorigin="anonymous"></script>
+<script is:inline>
+  (function () {
+    function stripDelimiters(value) {
+      return String(value || '')
+        .trim()
+        .replace(/^\\\(|\\\)$/g, '')
+        .replace(/^\\\[|\\\]$/g, '')
+        .replace(/^\$\$|\$\$$/g, '')
+        .replace(/^\$|\$$/g, '');
+    }
+
+    /*
+     * Common LaTeX macros that show up in arXiv-style preprints but are
+     * not in the KaTeX core. Keep this list small and surgical — KaTeX
+     * already handles `\mathbb`, `\mathcal`, `\mathfrak`, `\mathbf`, and
+     * the standard greek/operator set. We patch in the few helpers that
+     * caused the visible "holes" in production rendering of physics and
+     * gravity manuscripts.
+     */
+    var OPENXIV_KATEX_MACROS = {
+      '\\rm': '\\mathrm',
+      '\\bm': '\\boldsymbol',
+      '\\d': '\\mathrm{d}',
+      '\\dd': '\\mathrm{d}',
+      '\\eqdef': ':=',
+      '\\defeq': ':=',
+      '\\eqsim': '\\approx',
+      '\\rmd': '\\mathrm{d}',
+      '\\Tr': '\\operatorname{Tr}',
+      '\\tr': '\\operatorname{tr}',
+      '\\diag': '\\operatorname{diag}',
+      '\\sgn': '\\operatorname{sgn}',
+    };
+
+    function renderLatexmlMath(root) {
+      if (!window.katex) return;
+      (root || document)
+        .querySelectorAll(
+          'math annotation[encoding="application/x-tex"], math annotation[encoding="application/x-latex"]',
+        )
+        .forEach(function (annotation) {
+          var math = annotation.closest('math');
+          if (!math || math.dataset.openxivKatex === '1') return;
+          if (math.closest('svg')) {
+            math.setAttribute('translate', 'no');
+            math.setAttribute('lang', 'en');
+            math.classList.add('notranslate');
+            return;
+          }
+          var tex = stripDelimiters(annotation.textContent || '');
+          if (!tex) return;
+          math.setAttribute('translate', 'no');
+          math.classList.add('notranslate');
+          var displayMode =
+            math.getAttribute('display') === 'block' ||
+            Boolean(math.closest('.ltx_equation'));
+          var holder = document.createElement(displayMode ? 'div' : 'span');
+          holder.className = displayMode
+            ? 'paper-math paper-math-display openxiv-scrollbarless'
+            : 'paper-math';
+          // translate="no" stops Chrome / Safari / browser-level
+          // translators from rewriting the KaTeX-rendered span tree.
+          // Without it the page renders correctly, then a few seconds
+          // later translation walks the DOM, wraps every character in a
+          // <font> shim, and the formula collapses into "holes". The
+          // attribute cascades to children so one tag on the holder is
+          // enough.
+          holder.setAttribute('translate', 'no');
+          holder.setAttribute('lang', 'en');
+          holder.classList.add('notranslate');
+          /*
+           * `throwOnError: false` is the critical robustness setting: KaTeX
+           * renders as much of the expression as it can and inserts a
+           * neutral-coloured marker for unknown commands instead of
+           * aborting the whole formula. With `true`, a single unsupported
+           * macro left the raw MathML node in the DOM and the browser's
+           * partial MathML fallback produced the visible "holes" the
+           * author reported. `errorColor: 'inherit'` keeps the markers
+           * unobtrusive on the dark theme.
+           */
+          try {
+            window.katex.render(tex, holder, {
+              displayMode: displayMode,
+              output: 'html',
+              throwOnError: false,
+              errorColor: 'inherit',
+              strict: 'ignore',
+              trust: false,
+              macros: OPENXIV_KATEX_MACROS,
+            });
+            math.dataset.openxivKatex = '1';
+            math.replaceWith(holder);
+          } catch (_err) {
+            // Defensive: even with throwOnError: false KaTeX can throw on
+            // certain pathological inputs. Drop a textual fallback so the
+            // reader sees the source TeX rather than a fragmented MathML
+            // skeleton.
+            math.dataset.openxivKatex = 'failed';
+            holder.textContent = tex;
+            holder.classList.add('paper-math-fallback');
+            try {
+              math.replaceWith(holder);
+            } catch (_err2) {
+              /* leave the original math element alone */
+            }
+          }
+        });
+    }
+
+    function renderDelimitedMath(root) {
+      if (!window.renderMathInElement) return;
+      window.renderMathInElement(root || document.body, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '\\[', right: '\\]', display: true },
+          { left: '\\(', right: '\\)', display: false },
+        ],
+        throwOnError: false,
+        errorColor: 'inherit',
+        strict: 'ignore',
+      });
+    }
+
+    function protectRenderedMath(root) {
+      (root || document)
+        .querySelectorAll('math, .paper-math, .katex')
+        .forEach(function (node) {
+          node.setAttribute('translate', 'no');
+          node.setAttribute('lang', 'en');
+          node.classList.add('notranslate');
+        });
+    }
+
+    window.openxivRenderMath = function (root) {
+      var target = root || document.body;
+      protectRenderedMath(target);
+      renderLatexmlMath(target);
+      renderDelimitedMath(target);
+      protectRenderedMath(target);
+    };
+
+    function installCitationHighlights(root) {
+      (root || document).querySelectorAll('a[data-bib-ref]').forEach(function (anchor) {
+        if (anchor.dataset.openxivCitationHighlight === '1') return;
+        anchor.dataset.openxivCitationHighlight = '1';
+        function set(active) {
+          var id = anchor.getAttribute('data-bib-ref');
+          if (!id) return;
+          var target = document.getElementById(id);
+          if (!target) return;
+          target.classList.toggle('paper-citation-target-highlight', active);
+        }
+        anchor.addEventListener('mouseenter', function () {
+          set(true);
+        });
+        anchor.addEventListener('mouseleave', function () {
+          set(false);
+        });
+        anchor.addEventListener('focus', function () {
+          set(true);
+        });
+        anchor.addEventListener('blur', function () {
+          set(false);
+        });
+      });
+    }
+
+    function paperFigureZoomDialog() {
+      var existing = document.getElementById('paper-figure-zoom-dialog');
+      if (existing) return existing;
+      var dialog = document.createElement('dialog');
+      dialog.id = 'paper-figure-zoom-dialog';
+      dialog.className = 'paper-figure-zoom-dialog';
+      dialog.innerHTML =
+        '<form method="dialog" class="paper-figure-zoom-closebar">' +
+        '<button type="submit" class="paper-figure-zoom-close" aria-label="Close">×</button>' +
+        '</form><div class="paper-figure-zoom-stage"></div>';
+      dialog.addEventListener('click', function (event) {
+        if (event.target === dialog) dialog.close();
+      });
+      document.body.appendChild(dialog);
+      return dialog;
+    }
+
+    function isZoomableFigureMedia(figure) {
+      if (figure.closest('.katex, .paper-math, math, figcaption, table')) return false;
+      if (!figure.closest('.reader-body figure, .paper-inline-html figure')) return false;
+      return true;
+    }
+
+    function installFigureZoom(root) {
+      (root || document)
+        .querySelectorAll(
+          '.reader-body figure img, .reader-body figure svg, .paper-inline-html figure img, .paper-inline-html figure svg',
+        )
+        .forEach(function (figure) {
+          if (!isZoomableFigureMedia(figure)) return;
+          if (figure.dataset.openxivFigureZoom === '1') return;
+          figure.dataset.openxivFigureZoom = '1';
+          figure.setAttribute('tabindex', figure.getAttribute('tabindex') || '0');
+          figure.setAttribute('role', figure.getAttribute('role') || 'button');
+          figure.setAttribute('aria-label', figure.getAttribute('aria-label') || 'Open figure');
+          function open() {
+            var dialog = paperFigureZoomDialog();
+            var stage = dialog.querySelector('.paper-figure-zoom-stage');
+            if (!stage) return;
+            stage.replaceChildren(figure.cloneNode(true));
+            if (typeof dialog.showModal === 'function') dialog.showModal();
+            else dialog.setAttribute('open', '');
+          }
+          figure.addEventListener('click', open);
+          figure.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              open();
+            }
+          });
+        });
+    }
+
+    window.openxivInstallPaperBehaviors = function (root) {
+      installCitationHighlights(root || document);
+      installFigureZoom(root || document);
+    };
+
+    window.addEventListener('DOMContentLoaded', function () {
+      window.openxivRenderMath(document.body);
+      window.openxivInstallPaperBehaviors(document.body);
+    });
+  })();
+</script>

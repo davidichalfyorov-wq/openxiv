@@ -1,0 +1,203 @@
+---
+import Base from '../../layouts/Base.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+---
+<Base
+  title="Code of conduct — OpenXiv"
+  description="OpenXiv's expectations for authors, endorsers, readers, and moderators. Plain English. No legalese."
+>
+  <main class="container-narrow">
+    <Breadcrumbs items={[{ name: 'Home', url: '/' }, { name: 'Policies', url: '/policies' }, { name: 'Code of conduct', url: '/policies/code-of-conduct' }]} />
+    <h1 class="title-serif">Code of conduct</h1>
+    <p class="muted">Last updated 2026-05-19. Plain English.</p>
+
+    <p class="body-serif">
+      This document sets out what OpenXiv expects from people who use
+      the platform. It is short and concrete on purpose. We do not
+      promise utopia; we promise that violations are handled openly,
+      proportionally, and with the work as the unit of judgement, not
+      the person.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">For authors</h2>
+    <ul class="body-serif">
+      <li><strong>Integrity.</strong> The work is yours, your
+        co-authors', or correctly attributed prior work. Fabricated
+        data, doctored figures, hallucinated citations, or invented
+        references are grounds for refusal.</li>
+      <li><strong>Verification.</strong> Every citation, formula, and
+        numerical claim should have been checked by a human author
+        before submission. The full AI-disclosure framework lives in
+        the <a href="/policies/submission">submission policy</a>;
+        unverified or hallucinated output without that disclosure is
+        grounds for refusal.</li>
+      <li><strong>Conflicts of interest.</strong> Disclose funding,
+        commercial interests, or institutional positions that could
+        bias the work. The disclosure goes in the manuscript; we do
+        not run separate forms.</li>
+      <li><strong>Versioning, not silent edits.</strong> If you find
+        an error after publishing, submit a new version with a
+        changelog. Don't request that the original be quietly
+        modified.</li>
+      <li><strong>Engagement with critique.</strong> Endorsers and
+        readers may raise issues. Engage honestly. Disagreement is
+        fine; ignoring substantive critique while leaving the work
+        unchanged is bad faith.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">AI use: explicit rules</h2>
+    <p class="body-serif">
+      AI tools (large language models, code assistants, image
+      generators) are welcome on OpenXiv under clear, concrete
+      rules that match the consensus of major journals (Nature,
+      Science, JAMA) and publication-ethics bodies (COPE). The
+      goal is not to discourage AI use; the goal is to make AI
+      use legible, verifiable, and accountable.
+    </p>
+    <ol class="body-serif">
+      <li><strong>AI is never an author.</strong> Authors are
+        humans (or organizations through human representatives).
+        AI tools used in producing a paper are disclosed in the
+        AI-disclosure record, not the author list. Listing an
+        AI agent as a co-author is grounds for refusal.</li>
+      <li><strong>AI involvement is disclosed at one of four
+        levels.</strong> Every submission tags its AI use as
+        <em>none</em>, <em>assistant</em>, <em>co-author</em>, or
+        <em>primary</em>; names the models used (e.g. "Claude
+        Sonnet 4.5", "GPT-4o", "DeepSeek V3"); and describes
+        briefly how each was used. Misrepresented levels are
+        grounds for refusal.</li>
+      <li><strong>Every citation is human-verified.</strong> AI
+        tools regularly fabricate references that look real.
+        Every citation in the manuscript must have been checked
+        by a human author against the actual source.
+        Hallucinated citations are grounds for refusal.</li>
+      <li><strong>Every numerical claim is human-verified.</strong>
+        AI tools regularly fabricate computations, statistics, and
+        numerical results. Every quantitative claim must have
+        been reproduced or independently verified by a human
+        author. Fabricated numbers are grounds for refusal.</li>
+      <li><strong>No untouched LLM boilerplate.</strong> Phrases
+        like "as an AI language model", "I apologize for the
+        confusion", or "I cannot do that, but here's" have no
+        place in a research manuscript. Their presence indicates
+        the output was never edited by a human, and the
+        submission is refused.</li>
+      <li><strong>The author owns the work and the errors.</strong>
+        AI use does not transfer responsibility. The human
+        authors attest to the correctness of every claim in the
+        submission, regardless of whether AI helped produce it.
+        Disagreements about correctness are addressed through
+        endorsements, versioning, and refusal packets — not by
+        blaming the model.</li>
+    </ol>
+    <p class="body-serif">
+      These rules apply to text, code, figures, tables, and any
+      other content produced with AI assistance. They are
+      content-neutral: the standard is "verify before you submit",
+      not "avoid certain topics".
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">For endorsers</h2>
+    <ul class="body-serif">
+      <li><strong>Typed endorsements are statements of fact.</strong>
+        "Reproduced the result", "checked references", "verified
+        derivation": each one means you did the work and stand by
+        it. Casual or transactional endorsements
+        (you-endorse-mine-I-endorse-yours) corrode the signal that
+        makes typed endorsements worth anything.</li>
+      <li><strong>Scope.</strong> Endorse what you actually verified.
+        If you reproduced a numerical result, that is one
+        endorsement; if you did not check the derivation, do not
+        issue "verified derivation". Specificity is the value.</li>
+      <li><strong>Conflicts.</strong> Do not endorse work where you
+        have a financial, institutional, or close personal stake.
+        Co-authors, supervisors, and direct collaborators are
+        excluded by default.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">For everyone</h2>
+    <ul class="body-serif">
+      <li><strong>Argue the work, not the person.</strong> Critique
+        of a paper, method, or claim is welcome. Personal attacks,
+        harassment, doxxing, or threats are not.</li>
+      <li><strong>No protected-class harassment.</strong> OpenXiv is
+        for research. Behaviour targeting people on the basis of
+        race, ethnicity, religion, gender, sexual orientation,
+        disability, or nationality gets a hard refusal.</li>
+      <li><strong>Privacy.</strong> Do not share other people's
+        private correspondence, personal data, or identifying
+        information without consent.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">For moderators</h2>
+    <ul class="body-serif">
+      <li><strong>Refuse the work, not the author.</strong> Every
+        refusal is for a specific submission, not a person. Authors
+        may resubmit a revised version. We do not issue year-long
+        bans for honest mistakes.</li>
+      <li><strong>Public refusal packets.</strong> When a submission
+        is refused, the refusal packet is public: it names the
+        failure mode, points at the evidence, and recommends a
+        revision path. See the
+        <a href="/policies/submission">submission policy</a> for
+        the standard format.</li>
+      <li><strong>Proportionality.</strong> A single hallucinated
+        citation is fixable. A pattern of fabricated data across the
+        manuscript is a hard refusal. We err toward "return for
+        revision" when intent is unclear.</li>
+      <li><strong>No silent moderation.</strong> Every action
+        affecting visible content is logged on the
+        <a href="/transparency">transparency report</a>.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Sanctions</h2>
+    <p class="body-serif">
+      OpenXiv's ladder of responses, from gentlest to firmest:
+    </p>
+    <ol class="body-serif">
+      <li><strong>Return for revision.</strong> The submission has
+        issues; the author can fix and resubmit.</li>
+      <li><strong>Public refusal packet.</strong> The specific
+        submission is refused. The author may submit different work
+        later without prejudice.</li>
+      <li><strong>Endorsement removal.</strong> An endorsement found
+        to be fabricated or transactional is removed; the endorser
+        is notified, and the removal is logged publicly.</li>
+      <li><strong>Account suspension.</strong> Reserved for hard
+        cases: harassment, repeated bad-faith submissions after
+        refusal, or account compromise. Suspensions are documented
+        on the transparency report. Appeals are public and timed.</li>
+    </ol>
+    <p class="body-serif">
+      We do not have permanent author bans for honest mistakes. We
+      do have permanent removals for confirmed plagiarism, doxxing,
+      or systematic fraud.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Reporting</h2>
+    <p class="body-serif">
+      To report a code-of-conduct violation, email
+      <a href="mailto:davidich.alfyorov@gmail.com">davidich.alfyorov@gmail.com</a>
+      with the specific item, the concrete issue, and any evidence.
+      We acknowledge within 7 days. Outcomes are logged on the
+      <a href="/transparency">transparency report</a>, redacted only
+      for reporter privacy where requested.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px; margin-top: 24px;">Changes to this document</h2>
+    <p class="body-serif">
+      Material changes (new sanction categories, scope expansion)
+      are announced at least 30 days before they take effect.
+      Typographic or clarifying edits do not require notice; the
+      current text of every policy is always at the URL above.
+    </p>
+
+    <p class="muted" style="margin-top: 24px;">
+      Related: <a href="/policies/submission">Submission policy</a>
+      · <a href="/policies/takedown">Takedown</a>
+      · <a href="/transparency">Transparency report</a>
+      · <a href="/policies">All policies</a>.
+    </p>
+  </main>
+</Base>

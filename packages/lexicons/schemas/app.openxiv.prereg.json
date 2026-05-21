@@ -1,0 +1,28 @@
+{
+  "lexicon": 1,
+  "id": "app.openxiv.prereg",
+  "description": "Pre-registration of a study — locks in hypothesis, methods, and expected outcome BEFORE the experiment is run. Linked to a paper after the fact so readers can diff hypothesis vs result.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["hypothesis", "methodPlan", "expectedOutcome", "attestation", "registeredAt"],
+        "properties": {
+          "paperUri": { "type": "string", "format": "at-uri", "description": "Optionally link to the published paper that grew out of this prereg." },
+          "title": { "type": "string", "maxLength": 500 },
+          "hypothesis": { "type": "string", "minLength": 20, "maxLength": 2000 },
+          "methodPlan": { "type": "string", "minLength": 40, "maxLength": 8000 },
+          "expectedOutcome": { "type": "string", "minLength": 20, "maxLength": 4000 },
+          "primaryCategory": { "type": "string", "maxLength": 64 },
+          "registeredAt": { "type": "string", "format": "datetime" },
+          "attestation": {
+            "type": "string",
+            "knownValues": ["i-attest-this-prereg-precedes-data-collection"]
+          }
+        }
+      }
+    }
+  }
+}

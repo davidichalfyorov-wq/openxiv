@@ -1,0 +1,138 @@
+---
+import AltmetricBadge from './AltmetricBadge.astro';
+import { serverClient, type EngagementResponse } from '../lib/api';
+
+interface Props {
+  paperId: string;
+  doi?: string | null;
+}
+
+const { paperId, doi = null } = Astro.props;
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+
+let engagement: EngagementResponse = {
+  endorsements: { count: 0, breakdown: {} },
+  citations: null,
+  reads: { views: 0, html_opens: 0, pdf_downloads: 0 },
+};
+try {
+  engagement = await serverClient(cookie, Astro.request).paperEngagement(paperId);
+} catch {
+  engagement = {
+    endorsements: { count: 0, breakdown: {} },
+    citations: null,
+    reads: { views: 0, html_opens: 0, pdf_downloads: 0 },
+  };
+}
+
+const breakdown = Object.entries(engagement.endorsements.breakdown).filter(([, count]) => count > 0);
+
+function labelVerb(verb: string): string {
+  return verb
+    .replace(/^_legacy$/, 'Legacy')
+    .split('_')
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function compactNumber(value: number): string {
+  return new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+}
+---
+
+<aside class="engagement-badge" data-testid="engagement-badge" aria-label="Paper engagement">
+  <div class="engagement-row">
+    <section class="engagement-item engagement-endorsements" data-testid="engagement-endorsements">
+      <span class="engagement-value">{compactNumber(engagement.endorsements.count)}</span>
+      <span class="engagement-label">Endorsements</span>
+      {breakdown.length > 0 && (
+        <span class="engagement-breakdown" aria-label="Endorsement breakdown">
+          {breakdown.map(([verb, count]) => (
+            <span class="engagement-chip" title={labelVerb(verb)}>
+              {labelVerb(verb)} {compactNumber(count)}
+            </span>
+          ))}
+        </span>
+      )}
+    </section>
+
+    <section class="engagement-item" data-testid="engagement-citations">
+      <span class="engagement-value">{engagement.citations === null ? '—' : compactNumber(engagement.citations)}</span>
+      <span class="engagement-label">Cited by</span>
+      <span class="engagement-source">Crossref</span>
+    </section>
+
+    <section class="engagement-item" data-testid="engagement-reads">
+      <span class="engagement-value">{compactNumber(engagement.reads.views)}</span>
+      <span class="engagement-label">Reads</span>
+      <span class="engagement-source">
+        {compactNumber(engagement.reads.views)} views · {compactNumber(engagement.reads.html_opens)} html · {compactNumber(engagement.reads.pdf_downloads)} pdf
+      </span>
+    </section>
+  </div>
+
+  <AltmetricBadge doi={doi} />
+</aside>
+
+<style>
+  .engagement-badge {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elev);
+    padding: 12px;
+    margin-top: 2px;
+  }
+  .engagement-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.4fr) minmax(120px, 0.8fr) minmax(170px, 1fr);
+    gap: 10px;
+  }
+  .engagement-item {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .engagement-value {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    line-height: 1;
+    color: var(--text-primary);
+  }
+  .engagement-label {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .engagement-source {
+    color: var(--text-tertiary);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  .engagement-breakdown {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .engagement-chip {
+    display: inline-flex;
+    max-width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px 6px;
+    background: var(--bg-base);
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.25;
+  }
+  @media (max-width: 700px) {
+    .engagement-row {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

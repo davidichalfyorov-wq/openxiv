@@ -1,0 +1,107 @@
+---
+import Base from '../layouts/Base.astro';
+import { serverClient } from '../lib/api';
+
+const publicBase = import.meta.env.PUBLIC_WEB_BASE ?? 'http://localhost:4321';
+const feedGeneratorDid = import.meta.env.FEED_GENERATOR_DID ?? 'did:web:openxiv.net';
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+interface Feed {
+  name: string;
+  displayName: string;
+  description: string;
+}
+
+let feeds: Feed[] = [];
+let loadError: string | null = null;
+try {
+  const r = await client.listBskyFeeds();
+  feeds = r.feeds;
+} catch (err) {
+  loadError = (err as Error).message;
+}
+
+function bskyDeepLink(name: string): string {
+  const uri = `at://${feedGeneratorDid}/app.bsky.feed.generator/${name}`;
+  // bsky.app's feed share path. The encoded `at://` URL is unambiguous;
+  // older clients fall back to opening the path on the web.
+  return `https://bsky.app/profile/${encodeURIComponent(feedGeneratorDid)}/feed/${encodeURIComponent(name)}?u=${encodeURIComponent(uri)}`;
+}
+---
+<Base title="Bluesky feeds — OpenXiv">
+  <main class="container">
+    <header style="margin-bottom: 18px;">
+      <h1 class="title-serif">Custom Bluesky feeds</h1>
+      <p class="muted">
+        Six curated feeds we host inside Bluesky's App View. Subscribe in one tap; every paper
+        is the embed-rich Bluesky post the bridge mirrored from OpenXiv.
+      </p>
+    </header>
+
+    {loadError && (
+      <article class="card" style="border-color: var(--tone-caution);">
+        <strong>Couldn't load feeds.</strong>
+        <p class="muted" style="margin: 6px 0 0;">{loadError}</p>
+      </article>
+    )}
+
+    <ul class="feeds-list">
+      {feeds.map((f) => (
+        <li class="card feed-row">
+          <div>
+            <h2 class="feed-name">{f.displayName}</h2>
+            <p class="muted feed-desc">{f.description}</p>
+            <code class="muted feed-uri">at://{feedGeneratorDid}/app.bsky.feed.generator/{f.name}</code>
+          </div>
+          <a
+            class="btn btn-primary"
+            href={bskyDeepLink(f.name)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open in Bluesky →
+          </a>
+        </li>
+      ))}
+    </ul>
+  </main>
+</Base>
+
+<style>
+  .feeds-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .feed-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 18px;
+  }
+  .feed-name {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: 16px;
+  }
+  .feed-desc {
+    margin: 4px 0 6px;
+    font-size: 13px;
+  }
+  .feed-uri {
+    font-size: 11px;
+    word-break: break-all;
+  }
+  @media (max-width: 600px) {
+    .feed-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .feed-row a { width: 100%; text-align: center; }
+  }
+</style>
+
+{void publicBase}

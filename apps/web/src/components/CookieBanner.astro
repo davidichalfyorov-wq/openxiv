@@ -1,0 +1,312 @@
+---
+import { readConsentFromHeader } from '@openxiv/shared';
+
+/**
+ * Bottom-anchored cookie banner. Renders ONLY when:
+ *   - the `openxiv_consent` cookie is absent, AND
+ *   - the request does not announce DNT=1 at the JS layer.
+ *
+ * The server-side check on the cookie alone determines whether we emit
+ * the banner DOM. The DNT check happens in the inline script before
+ * paint — when DNT=1 we never render the banner, we just write the
+ * reject cookie. This avoids a flash-of-banner on opt-out browsers.
+ *
+ * The banner uses `is:inline` script + no framework — pure HTML/CSS/JS
+ * so it works on first-paint without React hydration.
+ *
+ * Visual: low-weight bottom card with three buttons. No modal traps;
+ * dismissal via any button or via `Esc` (only when Customize is open).
+ */
+
+const cookieHeader = Astro.request.headers.get('cookie');
+const existingConsent = readConsentFromHeader(cookieHeader);
+const hasConsent = existingConsent !== null;
+---
+
+{!hasConsent && (
+  <div id="consent-banner" class="consent-banner" data-state="loading" aria-hidden="true">
+    <div class="consent-banner-inner">
+      <div class="consent-banner-text">
+        <strong>OpenXiv uses cookies.</strong>
+        Essential cookies keep you signed in. Analytics + marketing cookies are
+        off by default. <a href="/privacy">Read the policy</a>.
+      </div>
+      <div class="consent-banner-actions">
+        <button type="button" class="btn btn-sm consent-customize" data-consent-action="customize">Customize</button>
+        <button type="button" class="btn btn-sm consent-reject" data-consent-action="reject">Reject non-essential</button>
+        <button type="button" class="btn btn-sm btn-primary consent-accept" data-consent-action="accept">Accept all</button>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="consent-customize-dialog" class="consent-dialog" aria-labelledby="consent-dialog-title">
+    <form method="dialog" class="consent-dialog-form" data-consent-customize-form>
+      <h2 id="consent-dialog-title" class="title-serif" style="margin:0 0 6px;">Cookie preferences</h2>
+      <p class="muted" style="margin:0 0 16px; font-size: 13px;">
+        Essential cookies are required for sign-in and cannot be turned off.
+        The other categories default to off.
+      </p>
+      <label class="consent-row consent-row-locked">
+        <input type="checkbox" checked disabled />
+        <span>
+          <strong>Essential</strong>
+          <span class="muted">Session cookie, handle bootstrap. Always on.</span>
+        </span>
+      </label>
+      <label class="consent-row">
+        <input type="checkbox" name="analytics" value="1" />
+        <span>
+          <strong>Analytics (first-party)</strong>
+          <span class="muted">Anonymous page-view + interaction counters served by OpenXiv. No fingerprinting, no third parties.</span>
+        </span>
+      </label>
+      <label class="consent-row">
+        <input type="checkbox" name="marketing" value="1" />
+        <span>
+          <strong>Marketing</strong>
+          <span class="muted">Twitter Pixel (rch4y) — signup &amp; submit conversions. Loaded only after you opt in here.</span>
+        </span>
+      </label>
+      <div class="consent-dialog-actions">
+        <button type="button" class="btn btn-sm" data-consent-dialog-cancel>Cancel</button>
+        <button type="submit" class="btn btn-sm btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script is:inline>
+    (function () {
+      var COOKIE_NAME = 'openxiv_consent';
+      var MAX_AGE = 60 * 60 * 24 * 365; // 1 year
+      var VERSION = 1;
+
+      function b64UrlEncode(s) {
+        var bytes = new TextEncoder().encode(s);
+        var bin = '';
+        for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+      function serialize(state) {
+        return b64UrlEncode(JSON.stringify({
+          e: state.essential ? 1 : 0,
+          a: state.analytics ? 1 : 0,
+          m: state.marketing ? 1 : 0,
+          t: Math.floor(state.ts || Date.now()),
+          v: VERSION,
+        }));
+      }
+      function writeCookie(state) {
+        var enc = serialize(state);
+        document.cookie = COOKIE_NAME + '=' + enc + '; Path=/; Max-Age=' + MAX_AGE + '; SameSite=Lax; Secure';
+      }
+      function hasCookie() {
+        return new RegExp('(?:^|;\\s*)' + COOKIE_NAME + '=').test(document.cookie);
+      }
+      function dntOn() {
+        try {
+          if (navigator.doNotTrack === '1' || window.doNotTrack === '1') return true;
+          if (navigator.globalPrivacyControl === true) return true;
+        } catch (_e) {}
+        return false;
+      }
+      function broadcast(state) {
+        try {
+          window.dispatchEvent(new CustomEvent('openxiv:consent', { detail: state }));
+        } catch (_e) {}
+      }
+      // Public revoke surface for /privacy page links.
+      window.openxivConsent = window.openxivConsent || {};
+      window.openxivConsent.revoke = function () {
+        writeCookie({ essential: true, analytics: false, marketing: false, ts: Date.now() });
+        broadcast({ essential: true, analytics: false, marketing: false });
+        // Hard reload so any pixel scripts already on the page stop firing.
+        location.reload();
+      };
+      window.openxivConsent.read = function () {
+        try {
+          var m = new RegExp('(?:^|;\\s*)' + COOKIE_NAME + '=([^;]+)').exec(document.cookie);
+          if (!m) return null;
+          var pad = '==='.slice(0, (4 - (m[1].length % 4)) % 4);
+          var raw = atob(m[1].replace(/-/g, '+').replace(/_/g, '/') + pad);
+          var bytes = new Uint8Array(raw.length);
+          for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+          var obj = JSON.parse(new TextDecoder().decode(bytes));
+          if (obj.v !== VERSION) return null;
+          return { essential: true, analytics: obj.a === 1, marketing: obj.m === 1, ts: obj.t };
+        } catch (_e) {
+          return null;
+        }
+      };
+
+      // DNT precedence: write reject cookie immediately, never render banner.
+      if (dntOn()) {
+        if (!hasCookie()) writeCookie({ essential: true, analytics: false, marketing: false, ts: Date.now() });
+        var banner = document.getElementById('consent-banner');
+        if (banner) banner.parentNode && banner.parentNode.removeChild(banner);
+        return;
+      }
+
+      if (hasCookie()) {
+        var b = document.getElementById('consent-banner');
+        if (b) b.parentNode && b.parentNode.removeChild(b);
+        return;
+      }
+
+      var bannerEl = document.getElementById('consent-banner');
+      if (!bannerEl) return;
+      bannerEl.setAttribute('data-state', 'visible');
+      bannerEl.setAttribute('aria-hidden', 'false');
+
+      var dialog = document.getElementById('consent-customize-dialog');
+      var cancelBtn = dialog && dialog.querySelector('[data-consent-dialog-cancel]');
+      var customizeForm = dialog && dialog.querySelector('[data-consent-customize-form]');
+
+      function decide(action) {
+        if (action === 'accept') {
+          writeCookie({ essential: true, analytics: true, marketing: true, ts: Date.now() });
+          broadcast({ essential: true, analytics: true, marketing: true });
+        } else if (action === 'reject') {
+          writeCookie({ essential: true, analytics: false, marketing: false, ts: Date.now() });
+          broadcast({ essential: true, analytics: false, marketing: false });
+        }
+        if (bannerEl && bannerEl.parentNode) bannerEl.parentNode.removeChild(bannerEl);
+        // Marketing → reload so the consent-gated pixel script renders.
+        if (action === 'accept') location.reload();
+      }
+
+      bannerEl.querySelectorAll('[data-consent-action]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var action = btn.getAttribute('data-consent-action');
+          if (action === 'customize') {
+            if (dialog && typeof dialog.showModal === 'function') dialog.showModal();
+            return;
+          }
+          decide(action);
+        });
+      });
+
+      if (cancelBtn && dialog) {
+        cancelBtn.addEventListener('click', function () { dialog.close(); });
+      }
+      if (customizeForm) {
+        customizeForm.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          var analytics = !!customizeForm.querySelector('input[name="analytics"]').checked;
+          var marketing = !!customizeForm.querySelector('input[name="marketing"]').checked;
+          writeCookie({ essential: true, analytics: analytics, marketing: marketing, ts: Date.now() });
+          broadcast({ essential: true, analytics: analytics, marketing: marketing });
+          if (dialog) dialog.close();
+          if (bannerEl && bannerEl.parentNode) bannerEl.parentNode.removeChild(bannerEl);
+          if (marketing) location.reload();
+        });
+      }
+    })();
+  </script>
+)}
+
+<style>
+  .consent-banner {
+    position: fixed;
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: min(1080px, calc(100vw - 32px));
+    z-index: 1000;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    box-shadow: var(--shadow-md);
+  }
+  .consent-banner[data-state="loading"] { visibility: hidden; }
+  .consent-banner-inner {
+    margin: 0 auto;
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .consent-banner-text {
+    flex: 1 1 320px;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .consent-banner-text a {
+    color: var(--text-primary);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  .consent-banner-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex: 0 0 auto;
+  }
+  .consent-dialog {
+    border: 0;
+    padding: 24px;
+    max-width: 460px;
+    width: 90vw;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 16px 50px rgba(0,0,0,0.4);
+  }
+  .consent-dialog::backdrop { background: rgba(0,0,0,.5); }
+  .consent-row {
+    display: flex;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: flex-start;
+  }
+  .consent-row:last-of-type { border-bottom: 0; }
+  .consent-row input { margin-top: 4px; }
+  .consent-row span span { display: block; font-size: 12.5px; margin-top: 2px; }
+  .consent-row-locked input { opacity: 0.6; cursor: not-allowed; }
+  .consent-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  @media (max-width: 640px) {
+    .consent-banner {
+      bottom: 10px;
+      max-width: calc(100vw - 20px);
+      padding: 10px;
+    }
+    .consent-banner-inner {
+      display: grid;
+      gap: 10px;
+    }
+    .consent-banner-text {
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+    .consent-banner-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+      width: 100%;
+    }
+    .consent-banner-actions .btn {
+      justify-content: center;
+      min-width: 0;
+      padding-left: 8px;
+      padding-right: 8px;
+      text-align: center;
+    }
+    .consent-accept {
+      grid-column: 1 / -1;
+      color: #0e0e10;
+      font-weight: 700;
+    }
+    .consent-dialog {
+      width: calc(100vw - 24px);
+      padding: 18px;
+    }
+  }
+</style>

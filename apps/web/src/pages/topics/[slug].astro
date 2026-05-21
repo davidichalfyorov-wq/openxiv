@@ -1,0 +1,156 @@
+---
+import Base from '../../layouts/Base.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { serverClient } from '../../lib/api';
+import { safeJsonLd, ORG_ID } from '../../lib/jsonld';
+import { wikidataUrlForCategory } from '../../lib/category-wikidata';
+
+const slug = Astro.params.slug;
+if (!slug) {
+  return new Response('Missing slug', { status: 400 });
+}
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+
+let dossier: Awaited<ReturnType<typeof client.topic>> | null = null;
+try {
+  dossier = await client.topic(slug, 30);
+} catch {
+  dossier = null;
+}
+
+const publicBase = import.meta.env.PUBLIC_WEB_BASE ?? 'http://localhost:4321';
+const apiBase = import.meta.env.PUBLIC_API_BASE ?? 'http://localhost:4000';
+const canonical = `${publicBase}/topics/${encodeURIComponent(slug)}`;
+const atomUrl = `${canonical}.atom`;
+const oaiUrl = dossier?.oaiSetSpec
+  ? `${apiBase}/oai-pmh?verb=ListRecords&metadataPrefix=oai_dc&set=${encodeURIComponent(dossier.oaiSetSpec)}`
+  : null;
+
+// Wikidata anchor lets answer engines reconcile our topic code with the
+// canonical encyclopedic entity. We attach it as ItemList.about so the
+// list itself is "about" the discipline, not just a bag of papers.
+const wikidataUrl = wikidataUrlForCategory(slug);
+
+const itemList = dossier
+  ? {
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      name: `OpenXiv — ${dossier.label}`,
+      url: canonical,
+      numberOfItems: dossier.papers.length,
+      publisher: { '@id': ORG_ID },
+      ...(wikidataUrl
+        ? {
+            about: {
+              '@type': 'Thing',
+              name: dossier.label,
+              sameAs: [wikidataUrl],
+            },
+          }
+        : {}),
+      itemListElement: dossier.papers.map((p, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        url: `${publicBase}/abs/${p.openxivUrlId ?? p.paperId}`,
+        name: p.title,
+      })),
+    }
+  : null;
+
+function relativeDate(iso: string | null): string {
+  if (!iso) return '';
+  const ms = Date.now() - new Date(iso).getTime();
+  const day = Math.floor(ms / 86400000);
+  if (day < 1) return 'today';
+  if (day === 1) return '1 day ago';
+  if (day < 30) return `${day} days ago`;
+  const mo = Math.floor(day / 30);
+  if (mo < 12) return `${mo} mo ago`;
+  return `${Math.floor(day / 365)} y ago`;
+}
+
+const title = dossier ? `${dossier.label} — OpenXiv` : `OpenXiv — ${slug}`;
+const desc = dossier?.blurb ?? `Papers on OpenXiv tagged ${slug}.`;
+---
+<Base title={title} description={desc}>
+  <Fragment slot="head">
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" type="application/atom+xml" title={`${slug} — OpenXiv`} href={atomUrl} />
+    {itemList && <script is:inline type="application/ld+json" set:html={safeJsonLd(itemList)} />}
+  </Fragment>
+
+  <main class="container">
+    <Breadcrumbs
+      items={[
+        { name: 'Home', url: '/' },
+        { name: 'Topics', url: '/' },
+        { name: dossier?.label ?? slug, url: `/topics/${slug}` },
+      ]}
+    />
+    <section class="topic-head">
+      <h1 class="title-serif">{dossier?.label ?? slug}</h1>
+      {dossier?.blurb && <p class="muted topic-blurb">{dossier.blurb}</p>}
+      <div class="topic-meta row">
+        <a class="btn btn-sm" href={atomUrl}>Atom feed</a>
+        {oaiUrl && (
+          <a class="btn btn-sm" href={oaiUrl} target="_blank" rel="noopener">OAI-PMH set ({dossier?.oaiSetSpec})</a>
+        )}
+        {dossier && (
+          <span class="muted topic-count">{dossier.papers.length} paper{dossier.papers.length === 1 ? '' : 's'}</span>
+        )}
+      </div>
+    </section>
+
+    {dossier === null && (
+      <div class="card" style="border-color: var(--tone-caution);">
+        <strong>Topic dossier unavailable.</strong>
+        <p class="muted" style="margin: 6px 0 0;">The aggregation service didn't respond. Try again or browse the <a href="/search">search</a>.</p>
+      </div>
+    )}
+
+    {dossier && dossier.papers.length === 0 && (
+      <p class="muted">
+        No published papers under <code>{slug}</code> yet. Authors: tagging
+        with keywords or selecting this category at submission time will
+        populate the dossier.
+      </p>
+    )}
+
+    {dossier && dossier.papers.length > 0 && (
+      <ul class="topic-list">
+        {dossier.papers.map((p) => (
+          <li class="card topic-item">
+            <a
+              class="topic-title"
+              href={`/abs/${p.openxivUrlId ?? p.paperId}`}
+            >{p.title}</a>
+            <div class="muted topic-item-meta">
+              <span class="badge badge-tone-neutral">{p.primaryCategory}</span>
+              {p.publishedAt && <span> · published {relativeDate(p.publishedAt)}</span>}
+              {p.openxivId && <code class="muted topic-id">{p.openxivId}</code>}
+            </div>
+            {p.abstractFragment && (
+              <p class="body-serif topic-fragment">{p.abstractFragment}{p.abstractFragment.length >= 240 ? '…' : ''}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    )}
+  </main>
+</Base>
+
+<style>
+  .topic-head { margin-bottom: 18px; }
+  .topic-trail { margin: 0 0 8px; font-size: 13px; }
+  .topic-blurb { margin: 6px 0 8px; font-size: 14px; max-width: 60ch; }
+  .topic-meta { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .topic-count { font-size: 12px; }
+  .topic-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+  .topic-item { padding: 12px 16px; }
+  .topic-title { display: block; font-family: var(--font-serif); font-size: 16px; text-decoration: none; color: inherit; }
+  .topic-item-meta { font-size: 12px; margin-top: 4px; }
+  .topic-id { font-family: var(--font-mono); margin-left: 8px; }
+  .topic-fragment { margin: 8px 0 0; font-size: 14px; line-height: 1.6; }
+</style>

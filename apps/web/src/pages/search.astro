@@ -1,0 +1,110 @@
+---
+import Base from '../layouts/Base.astro';
+
+const apiBase =
+  (typeof process !== 'undefined' && process.env?.INTERNAL_API_BASE) ||
+  (typeof process !== 'undefined' && process.env?.PUBLIC_API_BASE) ||
+  import.meta.env.PUBLIC_API_BASE ||
+  'http://localhost:4000';
+
+const q = Astro.url.searchParams.get('q') ?? '';
+
+interface Match {
+  paperId: string;
+  paperTitle: string;
+  openxivId: string | null;
+  openxivUrlId: string | null;
+  sectionIdx: number;
+  sectionTitle: string | null;
+  anchor: string | null;
+  snippetHtml: string;
+  distance: number;
+}
+
+let results: Match[] = [];
+let error: string | null = null;
+
+if (q.trim().length >= 2) {
+  try {
+    const res = await fetch(`${apiBase}/api/search?q=${encodeURIComponent(q)}`, {
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    const data = (await res.json()) as { results: Match[] };
+    results = data.results;
+  } catch (e) {
+    error = (e as Error).message;
+  }
+}
+---
+<Base title={q ? `OpenXiv — search: ${q}` : 'OpenXiv — search'} description="Section-level semantic search across OpenXiv papers.">
+  <main class="container">
+    <h1 class="title-serif">Search</h1>
+    <form method="get" action="/search" class="row" style="gap: 8px; margin-bottom: 18px;">
+      <input class="input" type="text" name="q" value={q} placeholder="any phrase — semantic matching" style="flex: 1;" />
+      <button class="btn btn-primary" type="submit">Search</button>
+    </form>
+    <p class="muted" style="margin-top: -6px; margin-bottom: 16px;">
+      Section-level semantic search. Queries are embedded with Gemini gemini-embedding-001 (Matryoshka-truncated to 768d) and matched against per-section vectors in pgvector.
+    </p>
+
+    {error && (
+      <div class="card" style="border-color: var(--tone-caution);">
+        <strong>Search unavailable.</strong>
+        <p class="muted" style="margin: 6px 0 0;">{error}</p>
+      </div>
+    )}
+
+    {!error && q.trim().length >= 2 && results.length === 0 && (
+      <p class="muted">No matches. Try fewer or different terms.</p>
+    )}
+
+    {results.length > 0 && (
+      <div class="stack">
+        {results.map((m) => {
+          // Section-anchored matches deep-link into the HTML reader, where
+          // anchors actually resolve. Whole-paper matches still land on /abs.
+          const readBase = m.openxivUrlId ? `/abs/${m.openxivUrlId}` : `/paper/${m.paperId}`;
+          const href = m.anchor
+            ? `${readBase}/read#${m.anchor}`
+            : readBase;
+          return (
+            <article class="card">
+              {/*
+                Match relevance is intentionally NOT exposed as a raw vector
+                distance — those numbers (0.273, 0.412…) are scaring and
+                meaningless to readers and gameable by spammers. We surface
+                only the section text and let the reader judge fit.
+              */}
+              <a href={href} style="font-family: var(--font-serif); font-size: 18px; text-decoration: none; color: inherit;">
+                {m.paperTitle}
+              </a>
+              {m.sectionTitle && (
+                <div class="muted" style="font-size: 13px; margin-top: 4px;">
+                  Section: <strong>{m.sectionTitle}</strong>
+                </div>
+              )}
+              <p class="body-serif" style="margin: 10px 0 0; font-size: 14px; line-height: 1.55;" set:html={m.snippetHtml} />
+            </article>
+          );
+        })}
+      </div>
+    )}
+  </main>
+</Base>
+
+{q.trim().length >= 2 && (
+  <script is:inline define:vars={{ query: q.trim(), resultCount: results.length }}>
+    (function () {
+      if (typeof window.openxivTrack !== 'function') return;
+      window.openxivTrack('search_query', '/search', 'search', {
+        q: query.slice(0, 160),
+        resultCount: resultCount,
+      });
+    })();
+  </script>
+)}
+
+<style>
+  mark { background: rgba(122, 167, 240, 0.35); color: var(--text-primary); padding: 0 2px; border-radius: 3px; }
+</style>

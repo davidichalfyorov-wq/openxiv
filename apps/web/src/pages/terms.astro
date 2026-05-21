@@ -1,0 +1,35 @@
+---
+import Base from '../layouts/Base.astro';
+import {
+  SUBMISSION_TERMS_SECTIONS,
+  SUBMISSION_TERMS_VERSION,
+} from '@openxiv/shared';
+---
+<Base title="OpenXiv — terms of submission" description="OpenXiv submission terms — plain language.">
+  <main class="container-narrow">
+    <h1 class="title-serif">Submission terms</h1>
+    <p class="muted">
+      Version <code>{SUBMISSION_TERMS_VERSION}</code> · last updated 2026-05-17.
+      Plain language. This is the same text that the submission wizard shows you
+      when you click <em>Read the terms</em>.
+    </p>
+
+    {SUBMISSION_TERMS_SECTIONS.map((section) => (
+      <section style="margin-top: 22px;">
+        <h2 class="title-serif" style="font-size: 22px;">{section.heading}</h2>
+        {section.body.map((para) => (
+          <p class="body-serif">{para}</p>
+        ))}
+      </section>
+    ))}
+
+    <div class="divider"></div>
+
+    <p class="muted">
+      See also: <a href="/privacy">Privacy policy</a> · <a href="/dmca">DMCA / takedown</a> ·
+      <a href="https://github.com/openxiv-pending/openxiv/blob/main/docs/RETRACTION_POLICY.md">
+        retraction policy
+      </a>.
+    </p>
+  </main>
+</Base>

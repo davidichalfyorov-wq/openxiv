@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+.astro
+.turbo
+coverage
+playwright-report
+test-results
+pnpm-lock.yaml
+_legacy
+drizzle/meta

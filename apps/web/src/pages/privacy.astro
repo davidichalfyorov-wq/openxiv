@@ -1,0 +1,84 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="OpenXiv — privacy policy" description="OpenXiv privacy policy and data handling.">
+  <main class="container-narrow">
+    <h1 class="title-serif">Privacy policy</h1>
+    <p class="muted">Last updated: 2026-05-17. Plain-language version. The legal text is the source of truth in the eventual ToS.</p>
+
+    <h2 class="title-serif" style="font-size: 22px;">What we collect</h2>
+    <ul class="body-serif">
+      <li><strong>Account data</strong> — your DID, ORCID (if used), Google sub (if used), display name, optional avatar URL and bio. Collected when you sign in.</li>
+      <li><strong>Content</strong> — papers, posts, summaries, AI-disclosures, pre-registrations, reviews, follow relationships. Public by design.</li>
+      <li><strong>Session</strong> — an http-only JWT cookie scoped to the OpenXiv domain. Used only for auth; not shared with third parties.</li>
+      <li><strong>Logs</strong> — request ids, IPs, user-agents, latencies for 14 days. Used for debugging and rate-limiting.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px;">What we don't collect</h2>
+    <ul class="body-serif">
+      <li>No selling, no enrichment, no "data partners".</li>
+      <li>No analytics that fingerprint visitors. First-party event counters are
+        anonymous and opt-in.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px;">Tracking &amp; analytics</h2>
+    <p class="body-serif">
+      We use one third-party marketing pixel: <strong>Twitter (X) Universal
+      Web Tag, pixel id <code>rch4y</code></strong>. It loads from
+      <code>static.ads-twitter.com/uwt.js</code> and reports two events back
+      to the X Ads dashboard:
+    </p>
+    <ul class="body-serif">
+      <li><strong>Signup</strong> — fires once when a new account picks a
+        handle on <code>/auth/welcome</code>. We attach a
+        <em>conversion_id</em> (random UUID for dedupe) and, only if you
+        have explicitly opted into marketing, a SHA-256 hash of your email
+        address. The raw email is never sent.</li>
+      <li><strong>PaperSubmitted</strong> — fires once when a submission
+        completes on <code>/submit</code>. The only attached field is the
+        <em>conversion_id</em>.</li>
+      <li><strong>PageView</strong> — fires when the pixel boots, per X
+        Ads' default configuration.</li>
+    </ul>
+    <p class="body-serif">
+      The pixel does not load and no event fires unless you have granted
+      marketing consent via the cookie banner. <em>Do Not Track</em>
+      (browser DNT, Global Privacy Control) is honoured: the banner does
+      not render, the pixel script is not emitted, and any helper call
+      no-ops.
+    </p>
+    <p class="body-serif">
+      You can revoke consent at any time —
+      <button
+        type="button"
+        class="btn btn-sm"
+        onclick="window.openxivConsent && window.openxivConsent.revoke && window.openxivConsent.revoke()"
+      >Revoke tracking consent</button>
+      reloads the page with the pixel disabled. The <code>openxiv_notrack=1</code>
+      cookie still works as a permanent opt-out for both first-party
+      events and the Twitter pixel.
+    </p>
+
+    <h2 class="title-serif" style="font-size: 22px;">Your rights (GDPR / CCPA shorthand)</h2>
+    <ul class="body-serif">
+      <li><strong>Access</strong> — download all your records via the API at <code>/profiles/&#123;your-did&#125;</code> and the AT-proto records in your PDS.</li>
+      <li><strong>Erasure</strong> — request deletion of your account at <a href="/dmca">/dmca</a> (same intake). Public content (papers, posts) is tombstoned with a withdrawal notice rather than fully erased so citation graphs don't break.</li>
+      <li><strong>Portability</strong> — your AT-proto PDS already speaks the migration protocol. Take your records to any other AT-proto App View.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px;">Cookies</h2>
+    <ul class="body-serif">
+      <li><strong>Session</strong> — one http-only JWT for sign-in. Always present
+        after you authenticate.</li>
+      <li><strong><code>openxiv_consent</code></strong> — your cookie-banner
+        choice. Lives 1 year. SameSite=Lax, Secure. Not http-only by design —
+        the client reads it to gate the marketing pixel.</li>
+      <li><strong>Third-party</strong> — only if you opted into marketing,
+        Twitter's <code>uwt.js</code> sets its own first-party-to-Twitter
+        cookies on <code>x.com</code>. We don't read those.</li>
+    </ul>
+
+    <h2 class="title-serif" style="font-size: 22px;">Contact</h2>
+    <p class="body-serif">Privacy questions: <a href="mailto:davidich.alfyorov@gmail.com"><code>davidich.alfyorov@gmail.com</code></a>.</p>
+  </main>
+</Base>

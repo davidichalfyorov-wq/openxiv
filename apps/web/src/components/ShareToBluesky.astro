@@ -1,0 +1,50 @@
+---
+import type { PaperDetail } from '../lib/api';
+import { paperPublicUrl } from '../lib/paper-url';
+
+interface Props {
+  paper: PaperDetail;
+}
+
+const { paper } = Astro.props;
+
+const absUrl = paperPublicUrl(paper, import.meta.env.PUBLIC_WEB_BASE);
+
+// Pre-filled compose text: short verbatim title + URL + hashtag. The bsky.app
+// intent endpoint accepts a single `text` query param up to ~300 chars; if we
+// blow past the limit bsky truncates silently, so we keep things short.
+const MAX_SHARE_TEXT = 250;
+function buildShareText(title: string, url: string): string {
+  const tag = '\n\n#openxiv';
+  const ellipsis = '…';
+  const fixed = `\n\n${url}${tag}`;
+  const titleBudget = MAX_SHARE_TEXT - fixed.length - ellipsis.length;
+  const safeTitle =
+    title.length <= titleBudget
+      ? title
+      : `${title.slice(0, Math.max(0, titleBudget))}${ellipsis}`;
+  return `${safeTitle}${fixed}`;
+}
+
+const shareText = buildShareText(paper.title, absUrl);
+const bskyIntent = `https://bsky.app/intent/compose?text=${encodeURIComponent(shareText)}`;
+---
+<a
+  href={bskyIntent}
+  class="btn btn-sm share-to-bsky"
+  target="_blank"
+  rel="noopener noreferrer"
+  title="Share this paper on Bluesky"
+>
+  <span aria-hidden="true">↗</span>
+  <span>Share on Bluesky</span>
+</a>
+
+<style>
+  .share-to-bsky {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+  }
+</style>

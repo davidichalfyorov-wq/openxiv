@@ -1,0 +1,367 @@
+---
+import Base from '../../layouts/Base.astro';
+import { serverClient } from '../../lib/api';
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const me = await serverClient(cookie, Astro.request).me().catch(() => null);
+if (!me || !me.authenticated) {
+  return Astro.redirect('/auth/sign-in?return=/settings/identity', 302);
+}
+const user = me.user;
+if (!user) {
+  return Astro.redirect('/auth/sign-in?return=/settings/identity', 302);
+}
+
+// Pull current links. The API returns the audit rows; we surface them
+// as a simple provider-keyed table.
+const apiBase =
+  (typeof process !== 'undefined' && process.env?.INTERNAL_API_BASE) ||
+  'http://api:4000';
+let links: Array<{
+  provider: string;
+  subject?: string;
+  linkedAt: string;
+  mastodonInstanceUrl?: string | null;
+  mastodonAccountUrl?: string | null;
+}> = [];
+try {
+  const r = await fetch(`${apiBase}/api/me/links`, {
+    headers: { cookie: cookie ?? '', accept: 'application/json' },
+    signal: AbortSignal.timeout(2500),
+  });
+  if (r.ok) {
+    const body = (await r.json()) as {
+        links?: Array<{
+          provider: string;
+          subject?: string;
+          linked_at?: string;
+          linkedAt?: string;
+          mastodonInstanceUrl?: string | null;
+          mastodonAccountUrl?: string | null;
+        }>;
+    };
+    links = (body.links ?? []).map((l) => ({
+      provider: l.provider,
+      linkedAt: l.linkedAt ?? l.linked_at ?? '',
+      ...(l.subject !== undefined ? { subject: l.subject } : {}),
+      ...(l.mastodonInstanceUrl !== undefined ? { mastodonInstanceUrl: l.mastodonInstanceUrl } : {}),
+      ...(l.mastodonAccountUrl !== undefined ? { mastodonAccountUrl: l.mastodonAccountUrl } : {}),
+    }));
+  }
+} catch {
+  // Treat as no-links; the page still renders the empty state.
+}
+
+const linked = new Set(links.map((l) => l.provider));
+const providers: Array<{ id: 'orcid' | 'google' | 'bluesky' | 'mastodon'; label: string; help: string }> = [
+  { id: 'orcid', label: 'ORCID', help: 'Recommended for researchers. Verifies your academic identity.' },
+  { id: 'google', label: 'Google', help: 'Convenient single-sign-on for quick access.' },
+  { id: 'bluesky', label: 'Bluesky', help: 'Federate your profile with the AT-proto network.' },
+  { id: 'mastodon', label: 'Mastodon', help: 'Crosspost new preprints to your Mastodon account.' },
+];
+---
+<Base title="Identity — OpenXiv">
+  <main class="container-narrow" style="max-width: 640px;">
+    <h1 class="title-serif">Settings</h1>
+    {/*
+      Settings tabs — keeps Identity and Profile reachable from each other
+      so neither page is orphaned. Active tab uses btn-primary; inactive is
+      the plain btn so the comparison is unambiguous.
+    */}
+    <nav class="row" aria-label="Settings sections" style="gap: 8px; margin: 8px 0 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border);">
+      <a class="btn btn-sm btn-primary" href="/settings/identity">Identity</a>
+      <a class="btn btn-sm" href="/settings/profile">Profile</a>
+    </nav>
+    <h2 class="title-serif" style="margin: 0 0 8px;">Identity</h2>
+    <p class="muted" style="margin-bottom: 24px;">
+      Sign-in providers linked to your OpenXiv account. Each provider you
+      link strengthens recovery if you lose access to any one of them, and
+      lets you sign in from multiple devices without password fatigue.
+    </p>
+    <div class="identity-table-wrap">
+      <table class="identity-table">
+        <thead>
+          <tr><th>Provider</th><th>Status</th><th>Linked at</th><th></th></tr>
+        </thead>
+        <tbody>
+          {providers.map((p) => {
+            const isLinked = linked.has(p.id);
+            const row = links.find((l) => l.provider === p.id);
+            const mastodonLabel = row?.subject ? `@${row.subject.replace(/^@/, '')}` : row?.mastodonInstanceUrl;
+            return (
+              <tr>
+                <td>
+                  <strong>{p.label}</strong>
+                  <div class="muted identity-provider-help">{p.help}</div>
+                </td>
+                <td>
+                  {isLinked ? <span class="badge badge-tone-success">Linked</span> : <span class="badge">Not linked</span>}
+                  {isLinked && p.id === 'mastodon' && mastodonLabel && (
+                    <div class="muted identity-linked-account">
+                      <a href={row?.mastodonAccountUrl ?? row?.mastodonInstanceUrl ?? '#'} target="_blank" rel="noreferrer">{mastodonLabel}</a>
+                    </div>
+                  )}
+                </td>
+                <td class="identity-linked-date">
+                  {isLinked && row?.linkedAt ? new Date(row.linkedAt).toISOString().slice(0, 10) : '—'}
+                </td>
+                <td>
+                  {isLinked ? (
+                    <button class="btn btn-sm" type="button" data-unlink-provider={p.id}>Unlink</button>
+                  ) : p.id === 'bluesky' ? (
+                    <form class="identity-bsky-link-form" data-bsky-link-form>
+                      <input
+                        class="input identity-bsky-handle"
+                        type="text"
+                        name="handle"
+                        placeholder="your-handle.bsky.social"
+                        autocomplete="username"
+                        spellcheck="false"
+                        required
+                      />
+                      <button class="btn btn-sm btn-primary" type="submit">Link</button>
+                    </form>
+                  ) : p.id === 'mastodon' ? (
+                    <form class="identity-mastodon-link-form" data-mastodon-link-form>
+                      <div class="identity-mastodon-fields">
+                        <input
+                          class="input identity-mastodon-account"
+                          type="text"
+                          name="instanceUrl"
+                          placeholder="https://mastodon.social/@name"
+                          autocomplete="url"
+                          spellcheck="false"
+                          aria-label="Mastodon profile URL, handle, or instance"
+                          required
+                        />
+                        <button class="btn btn-sm btn-primary" type="submit">Continue</button>
+                      </div>
+                      <div class="identity-link-status" data-mastodon-link-status aria-live="polite"></div>
+                    </form>
+                  ) : (
+                    <button class="btn btn-sm btn-primary" type="button" data-oauth-link-provider={p.id}>
+                      Link
+                    </button>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted" style="margin-top: 24px; font-size: 13px;">
+      Unlinking the only linked provider is not allowed — you would lose
+      every path back into the account. Unlinking the primary provider
+      requires promoting another one first.
+    </p>
+    <h2 class="title-serif" style="margin-top: 32px;">Signing key</h2>
+    <p class="muted" style="margin-bottom: 16px;">
+      Your account holds a secp256k1 keypair used to sign AT-proto records.
+      The public half is published in your DID Document at
+      <a href={`/u/${user.did?.replace('did:web:openxiv.net:u:', '') ?? user.handle}/did.json`}>
+        /u/.../did.json
+      </a>.
+      The private half is encrypted at rest with the operator's KEK.
+    </p>
+    <form method="post" action="/api-proxy/me/did/rotate-key" style="display:inline;">
+      <button class="btn btn-sm" type="submit" title="Generate a fresh keypair; the old key is archived for retro-verification.">
+        Rotate signing key
+      </button>
+    </form>
+  </main>
+</Base>
+
+<script is:inline>
+  (function () {
+    document.querySelectorAll('[data-unlink-provider]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var provider = button.getAttribute('data-unlink-provider');
+        if (!provider) return;
+        button.disabled = true;
+        fetch('/api-proxy/me/links/' + encodeURIComponent(provider), {
+          method: 'DELETE',
+          credentials: 'include',
+        })
+          .then(function (res) {
+            if (!res.ok) throw new Error('unlink failed');
+            window.location.reload();
+          })
+          .catch(function () {
+            button.disabled = false;
+          });
+      });
+    });
+
+    document.querySelectorAll('[data-oauth-link-provider]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var provider = button.getAttribute('data-oauth-link-provider');
+        if (!provider) return;
+        button.disabled = true;
+        var params = new URLSearchParams({ intent: 'link', redirect_after: '/settings/identity' });
+        fetch('/api-proxy/auth/' + encodeURIComponent(provider) + '/login?' + params.toString(), {
+          credentials: 'include',
+          headers: { accept: 'application/json' },
+        })
+          .then(function (res) {
+            return res.ok ? res.json() : res.text().then(function (text) { throw new Error(text || 'link failed'); });
+          })
+          .then(function (data) {
+            if (data && data.url) window.location.assign(data.url);
+          })
+          .catch(function () {
+            button.disabled = false;
+          });
+      });
+    });
+
+    var form = document.querySelector('[data-bsky-link-form]');
+    if (form) form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var input = form.querySelector('input[name="handle"]');
+      var handle = input && input.value ? input.value.trim() : '';
+      if (!handle) return;
+      var button = form.querySelector('button[type="submit"]');
+      if (button) button.disabled = true;
+      fetch('/api-proxy/auth/bluesky/start', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          handle: handle,
+          redirect_after: '/settings/identity',
+          intent: 'link',
+        }),
+      })
+        .then(function (res) {
+          return res.ok ? res.json() : res.text().then(function (text) { throw new Error(text || 'link failed'); });
+        })
+        .then(function (data) {
+          if (data && data.url) window.location.assign(data.url);
+        })
+        .catch(function () {
+          if (button) button.disabled = false;
+        });
+    });
+
+    var mastodonForm = document.querySelector('[data-mastodon-link-form]');
+    if (mastodonForm) mastodonForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var input = mastodonForm.querySelector('input[name="instanceUrl"]');
+      var instanceUrl = input && input.value ? input.value.trim() : '';
+      if (!instanceUrl) return;
+      var button = mastodonForm.querySelector('button[type="submit"]');
+      var status = mastodonForm.querySelector('[data-mastodon-link-status]');
+      if (button) button.disabled = true;
+      if (status) {
+        status.textContent = 'Opening Mastodon...';
+        status.setAttribute('data-tone', 'pending');
+      }
+      fetch('/api-proxy/auth/mastodon/start', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          instanceUrl: instanceUrl,
+          redirect_after: '/settings/identity',
+        }),
+      })
+        .then(function (res) {
+          return res.ok ? res.json() : res.text().then(function (text) { throw new Error(text || 'link failed'); });
+        })
+        .then(function (data) {
+          if (data && data.url) window.location.assign(data.url);
+        })
+        .catch(function (err) {
+          if (status) {
+            status.textContent = 'Could not start Mastodon sign-in. Use a profile URL like https://mastodon.social/@name or try again.';
+            status.setAttribute('data-tone', 'error');
+          }
+          if (typeof console !== 'undefined') console.warn('[openxiv] Mastodon link failed', err);
+          if (button) button.disabled = false;
+        });
+    });
+  })();
+</script>
+
+<style>
+  .identity-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+  }
+  .identity-table {
+    width: 100%;
+    min-width: 620px;
+    border-collapse: collapse;
+  }
+  .identity-table th {
+    padding: 10px 8px;
+    text-align: left;
+    font-size: 12px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+  }
+  .identity-table td {
+    padding: 12px 8px;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border);
+  }
+  .identity-table tr:last-child td {
+    border-bottom: 0;
+  }
+  .identity-provider-help {
+    font-size: 13px;
+    max-width: 260px;
+  }
+  .identity-linked-account {
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  .identity-linked-date {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .identity-bsky-link-form {
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) auto;
+    gap: 6px;
+    align-items: center;
+  }
+  .identity-mastodon-link-form {
+    display: grid;
+    gap: 4px;
+  }
+  .identity-mastodon-fields {
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) auto;
+    gap: 6px;
+    align-items: center;
+  }
+  .identity-bsky-handle,
+  .identity-mastodon-account {
+    min-width: 0;
+    font-size: 13px;
+    padding: 6px 8px;
+  }
+  .identity-link-status {
+    min-height: 16px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .identity-link-status[data-tone="error"] {
+    color: var(--danger, #b42318);
+  }
+  @media (max-width: 700px) {
+    .identity-table-wrap {
+      margin-left: -2px;
+      margin-right: -2px;
+    }
+    .identity-table {
+      min-width: 620px;
+    }
+  }
+</style>

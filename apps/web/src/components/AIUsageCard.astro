@@ -1,0 +1,298 @@
+---
+import type { PaperDetail } from '../lib/api';
+
+interface Props {
+  paper: PaperDetail;
+  absUrl: string;
+  variant?: 'compact' | 'full';
+}
+const { paper, absUrl, variant = 'full' } = Astro.props;
+const isCompact = variant === 'compact';
+const articleId = isCompact ? 'ai-usage-compact' : 'ai-usage';
+const headingId = isCompact ? 'aiusage-compact-heading' : 'aiusage-heading';
+
+// AI Usage Card (P2 #7) — the disclosure surfaced as exportable artifacts.
+// Always renders in the reader side rail so missing disclosure is explicit.
+
+const d = paper.disclosure;
+
+const LEVEL_BLURB: Record<string, string> = {
+  undisclosed: 'No structured AI-use disclosure is attached to this version.',
+  none: 'Author attests that no generative AI participated in producing this work.',
+  assistant: 'Author used AI for narrow, mechanical tasks (e.g. editing, grammar).',
+  coauthor: 'AI contributed substantive intellectual work alongside the author.',
+  primary: 'AI did the bulk of the intellectual work; author supervised.',
+};
+
+const used = d?.aiUsed ?? [];
+const models = d?.models ?? [];
+const level = d?.level ?? 'undisclosed';
+const summaryAi = d?.summaryAiGenerated ?? false;
+const humanVerified = d?.humanVerified ?? false;
+const paperRecordUri = paper.uri;
+
+// ---- Exportable formats ----
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CreativeWork',
+  name: `AI Usage Disclosure for ${paper.title}`,
+  identifier: paper.openxivId ?? paper.id,
+  url: `${absUrl}#ai-usage`,
+  about: {
+    '@type': 'ScholarlyArticle',
+    name: paper.title,
+    identifier: paper.openxivId ?? paper.id,
+    url: absUrl,
+  },
+  // OpenXiv-specific structured fields. The `contributor` array uses
+  // schema:contributor for each model, with additionalType=SoftwareApplication
+  // so machine readers can distinguish AI contributors from human authors.
+  contributor: models.map((m) => ({
+    '@type': 'SoftwareApplication',
+    name: m.name,
+    ...(m.vendor ? { publisher: { '@type': 'Organization', name: m.vendor } } : {}),
+    ...(m.version ? { softwareVersion: m.version } : {}),
+    ...(m.usage ? { applicationCategory: m.usage } : {}),
+    additionalType: 'AIModel',
+  })),
+  // Custom fields under an explicit namespace so crawlers that don't know
+  // these properties can still parse the rest.
+  'openxiv:disclosureLevel': level,
+  'openxiv:disclosureLevelDescription': LEVEL_BLURB[level],
+  'openxiv:aiUsedFor': used,
+  'openxiv:summaryAiGenerated': summaryAi,
+  'openxiv:humanVerified': humanVerified,
+  ...(d?.notes ? { 'openxiv:notes': d.notes } : {}),
+};
+
+const jsonLdStr = JSON.stringify(jsonLd, null, 2);
+
+// LaTeX snippet — drop straight into the paper's source.
+const usedJoined = used.length > 0 ? used.join(', ') : '(not specified)';
+const modelsLine =
+  models.length > 0
+    ? models
+        .map((m) => `${m.name}${m.vendor ? ` (${m.vendor})` : ''}${m.version ? ` v${m.version}` : ''}`)
+        .join(', ')
+    : '(none disclosed)';
+const latex = [
+  `% OpenXiv AI Usage Disclosure for ${paper.openxivId ?? paper.id}`,
+  `% Full record: ${absUrl}#ai-usage`,
+  `\\section*{AI Usage Disclosure}`,
+  `\\noindent`,
+  `\\textbf{Level:} ${level} --- ${LEVEL_BLURB[level] ?? ''}\\\\`,
+  `\\textbf{AI used for:} ${usedJoined}\\\\`,
+  `\\textbf{Models:} ${modelsLine}\\\\`,
+  `\\textbf{Summary AI-generated:} ${summaryAi ? 'yes' : 'no'} \\quad \\textbf{Human-verified:} ${humanVerified ? 'yes' : 'no'}`,
+  d?.notes ? `\\\\\n\\textbf{Notes:} ${d.notes.replace(/[&%$#_{}^~\\]/g, (c) => '\\' + c)}` : '',
+  `\\par\\medskip`,
+  `\\noindent\\small This disclosure is part of OpenXiv's AI Usage Card. The`,
+  `machine-readable version (JSON-LD, AT-Proto record) is available at`,
+  `\\url{${absUrl}#ai-usage}.`,
+]
+  .filter((s) => s !== '')
+  .join('\n');
+
+const safeKey = (paper.openxivId ?? paper.id).replace(/[^a-zA-Z0-9]+/g, '_');
+const bibtex = [
+  `@misc{openxiv_aiusage_${safeKey},`,
+  `  type    = {ai-usage-disclosure},`,
+  `  title   = {AI Usage Disclosure for ${paper.title.replace(/[{}]/g, '')}},`,
+  `  author  = {${paper.authors.map((a) => a.displayName).join(' and ') || 'Anonymous'}},`,
+  `  year    = {${(paper.publishedAt ?? paper.createdAt).slice(0, 4)}},`,
+  `  level   = {${level}},`,
+  models.length > 0 ? `  models  = {${models.map((m) => m.name).join('; ')}},` : null,
+  used.length > 0 ? `  used_for = {${used.join('; ')}},` : null,
+  paperRecordUri ? `  at_record_uri = {${paperRecordUri}},` : null,
+  `  url     = {${absUrl}#ai-usage},`,
+  `  note    = {OpenXiv structured AI-use disclosure}`,
+  `}`,
+]
+  .filter(Boolean)
+  .join('\n');
+---
+<article id={articleId} class={`card aiusage ${isCompact ? 'aiusage-compact' : ''}`} aria-labelledby={headingId}>
+    <header class="aiusage-head">
+      <div>
+        <h2 id={headingId}>AI Usage Card</h2>
+        <p class="muted aiusage-subtitle">
+          {LEVEL_BLURB[level]} The structured record is exportable as
+          JSON-LD, LaTeX, BibTeX, or via the AT-Proto record itself.
+        </p>
+      </div>
+      <span class={`aiusage-level-pill aiusage-level-${level}`} aria-label={`Disclosure level ${level}`}>{level}</span>
+    </header>
+
+    <dl class="aiusage-facts">
+      {used.length > 0 && (
+        <>
+          <dt>Used for</dt>
+          <dd>{used.join(', ')}</dd>
+        </>
+      )}
+      {models.length > 0 && (
+        <>
+          <dt>Models</dt>
+          <dd>{models.map((m) => `${m.name}${m.vendor ? ` (${m.vendor})` : ''}`).join(', ')}</dd>
+        </>
+      )}
+      <dt>Summary AI-generated</dt>
+      <dd>{summaryAi ? 'yes' : 'no'}</dd>
+      <dt>Human-verified</dt>
+      <dd>{humanVerified ? 'yes' : 'no'}</dd>
+      {d?.notes && (
+        <>
+          <dt>Author note</dt>
+          <dd style="white-space: pre-wrap;">{d.notes}</dd>
+        </>
+      )}
+    </dl>
+
+    {!isCompact && (
+      <>
+        <div class="aiusage-actions">
+          <button class="btn btn-sm" type="button" data-aiusage-copy="aiusage-jsonld">Copy JSON-LD</button>
+          <button class="btn btn-sm" type="button" data-aiusage-copy="aiusage-latex">Copy LaTeX</button>
+          <button class="btn btn-sm" type="button" data-aiusage-copy="aiusage-bibtex">Copy BibTeX</button>
+          {paperRecordUri && (
+            <a class="btn btn-sm" href={`https://atproto-browser.vercel.app/at/${encodeURIComponent(paperRecordUri.replace(/^at:\/\//, ''))}`} target="_blank" rel="noopener">
+              AT-Proto record →
+            </a>
+          )}
+        </div>
+
+        <details class="aiusage-preview">
+          <summary class="muted">View JSON-LD</summary>
+          <pre id="aiusage-jsonld" class="aiusage-pre">{jsonLdStr}</pre>
+        </details>
+        <details class="aiusage-preview">
+          <summary class="muted">View LaTeX snippet</summary>
+          <pre id="aiusage-latex" class="aiusage-pre">{latex}</pre>
+        </details>
+        <details class="aiusage-preview">
+          <summary class="muted">View BibTeX entry</summary>
+          <pre id="aiusage-bibtex" class="aiusage-pre">{bibtex}</pre>
+        </details>
+      </>
+    )}
+  </article>
+
+{!isCompact && (
+  <script type="application/ld+json" is:inline set:html={jsonLdStr.replace(/<\/script/gi, '<\\/script')}></script>
+)}
+
+{!isCompact && (
+  <script>
+    document.querySelectorAll<HTMLButtonElement>('button[data-aiusage-copy]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.aiusageCopy;
+        if (!id) return;
+        const el = document.getElementById(id);
+        const text = el?.textContent ?? '';
+        try {
+          await navigator.clipboard.writeText(text);
+          const orig = btn.textContent ?? '';
+          btn.textContent = 'Copied';
+          btn.disabled = true;
+          setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1400);
+        } catch {
+          btn.textContent = 'Press ⌘C';
+        }
+      });
+    });
+  </script>
+)}
+
+<style>
+  .aiusage {
+    padding: clamp(12px, 1.5vw, 16px);
+    min-width: 0;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .aiusage-compact { padding: clamp(12px, 1.4vw, 14px); }
+  .aiusage-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .aiusage-head h2 {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: clamp(16px, 1.4vw, 17px);
+  }
+  .aiusage-subtitle { margin: 4px 0 0; font-size: 13px; max-width: 60ch; }
+  .aiusage-compact .aiusage-subtitle { max-width: 32ch; }
+  .aiusage-level-pill {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .aiusage-level-none { background: color-mix(in srgb, var(--tone-success) 14%, transparent); color: var(--tone-success); }
+  .aiusage-level-undisclosed { background: color-mix(in srgb, var(--text-tertiary) 14%, transparent); color: var(--text-secondary); }
+  .aiusage-level-assistant { background: color-mix(in srgb, var(--tone-info) 14%, transparent); color: var(--tone-info); }
+  .aiusage-level-coauthor { background: color-mix(in srgb, var(--tone-warning) 14%, transparent); color: var(--tone-warning); }
+  .aiusage-level-primary { background: color-mix(in srgb, var(--tone-caution) 16%, transparent); color: var(--tone-caution); }
+
+  .aiusage-facts {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    gap: 6px 14px;
+    margin: 12px 0 12px;
+    font-size: 13px;
+    min-width: 0;
+  }
+  .aiusage-compact .aiusage-facts {
+    grid-template-columns: minmax(72px, max-content) minmax(0, 1fr);
+    gap: 5px 10px;
+    margin-bottom: 0;
+  }
+  .aiusage-facts dt {
+    color: var(--text-secondary);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .aiusage-facts dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .aiusage-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .aiusage-preview { margin-top: 10px; }
+  .aiusage-pre {
+    margin: 8px 0 0;
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
+  }
+  @media (max-width: 768px) {
+    .aiusage-facts,
+    .aiusage-compact .aiusage-facts {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .aiusage-facts dt {
+      margin-top: 4px;
+      font-weight: 600;
+    }
+    .aiusage-actions .btn {
+      min-height: 44px;
+    }
+  }
+</style>

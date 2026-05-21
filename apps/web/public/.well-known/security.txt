@@ -1,0 +1,8 @@
+# OpenXiv security contact (RFC 9116)
+# Found a vulnerability? Please report it directly to the operator.
+# Acknowledgements published with consent.
+
+Contact: mailto:davidich.alfyorov@gmail.com
+Expires: 2027-05-18T00:00:00.000Z
+Preferred-Languages: en, ru
+Canonical: https://openxiv.net/.well-known/security.txt

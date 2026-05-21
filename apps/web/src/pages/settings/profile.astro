@@ -1,0 +1,243 @@
+---
+import Base from '../../layouts/Base.astro';
+import { serverClient } from '../../lib/api';
+
+const cookie = Astro.request.headers.get('cookie') ?? undefined;
+const client = serverClient(cookie, Astro.request);
+const me = await client.me().catch(() => null);
+if (!me || !me.authenticated) {
+  return Astro.redirect('/auth/sign-in?return=/settings/profile', 302);
+}
+const user = me.user;
+if (!user) {
+  return Astro.redirect('/auth/sign-in?return=/settings/profile', 302);
+}
+
+let settings: Awaited<ReturnType<typeof client.myProfileSettings>> | null = null;
+let loadError: string | null = null;
+try {
+  settings = await client.myProfileSettings();
+} catch (e) {
+  loadError = (e as Error).message;
+}
+
+const modes = settings?.modes ?? [];
+function findMode(name: string): { mode: string; enabled: boolean; public: boolean } {
+  return (
+    modes.find((m) => m.mode === name) ?? { mode: name, enabled: false, public: false }
+  );
+}
+const author = findMode('author');
+const reviewer = findMode('reviewer');
+const reader = findMode('reader');
+
+const ai = (settings?.cards['ai_policy']?.content ?? {}) as Record<string, unknown>;
+const aiModelsUsed = Array.isArray(ai.models_used) ? (ai.models_used as string[]).join('\n') : '';
+const aiModelsAvoided = Array.isArray(ai.models_avoided) ? (ai.models_avoided as string[]).join('\n') : '';
+const aiUseCases = Array.isArray(ai.use_cases) ? (ai.use_cases as string[]).join('\n') : '';
+const aiVerification = typeof ai.verification_practice === 'string' ? ai.verification_practice : '';
+const aiFailures = typeof ai.failure_modes === 'string' ? ai.failure_modes : '';
+
+const rg = (settings?.cards['reading_guide']?.content ?? {}) as Record<string, unknown>;
+const rgPrereq = typeof rg.prerequisites === 'string' ? rg.prerequisites : '';
+const rgStart = typeof rg.start_here === 'string' ? rg.start_here : '';
+const rgAvoid = typeof rg.avoid_starting_with === 'string' ? rg.avoid_starting_with : '';
+const rgPitfalls = typeof rg.common_pitfalls === 'string' ? rg.common_pitfalls : '';
+---
+<Base title="Profile settings — OpenXiv">
+  <main class="container">
+    <h1 class="title-serif">Settings</h1>
+    {/*
+      Settings tabs — mirror of the nav on /settings/identity. Profile is
+      the active tab here. See identity.astro for the rationale.
+    */}
+    <nav class="row" aria-label="Settings sections" style="gap: 8px; margin: 8px 0 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border);">
+      <a class="btn btn-sm" href="/settings/identity">Identity</a>
+      <a class="btn btn-sm btn-primary" href="/settings/profile">Profile</a>
+    </nav>
+    <h2 class="title-serif" style="margin: 0 0 8px;">Profile</h2>
+    <p class="muted">Toggle which modes show on your public profile and edit your AI-policy and reading-guide cards.</p>
+
+    {loadError && (
+      <article class="card" style="border-color: var(--tone-caution);">
+        <strong>Could not load settings.</strong>
+        <p class="muted" style="margin: 6px 0 0;">{loadError}</p>
+      </article>
+    )}
+
+    {settings && (
+      <>
+        <section class="card settings-section">
+          <h2>Modes</h2>
+          <p class="muted">Identity flags — orthogonal to permissions. Reader is on by default.</p>
+          {(['author', 'reviewer', 'reader'] as const).map((name) => {
+            const m = name === 'author' ? author : name === 'reviewer' ? reviewer : reader;
+            return (
+              <form class="settings-mode" data-mode-form data-mode={name}>
+                <label class="settings-mode-label">{name.charAt(0).toUpperCase() + name.slice(1)}</label>
+                <label><input type="checkbox" name="enabled" checked={m.enabled} /> enabled</label>
+                <label><input type="checkbox" name="public" checked={m.public} /> public</label>
+                <button class="btn btn-sm" type="submit">Save</button>
+                <span class="muted settings-status" data-status></span>
+              </form>
+            );
+          })}
+        </section>
+
+        <section class="card settings-section">
+          <h2>AI Usage Policy</h2>
+          <p class="muted">How you use (and avoid) AI in your work. Surfaces on /u/{user.handle ?? user.did} when your Author mode is public.</p>
+          <form data-card-form data-card="ai_policy">
+            <label class="settings-field">
+              <span>Models used (one per line)</span>
+              <textarea name="models_used" rows="3" maxlength="2000">{aiModelsUsed}</textarea>
+            </label>
+            <label class="settings-field">
+              <span>Models avoided (one per line)</span>
+              <textarea name="models_avoided" rows="3" maxlength="2000">{aiModelsAvoided}</textarea>
+            </label>
+            <label class="settings-field">
+              <span>Use cases (one per line)</span>
+              <textarea name="use_cases" rows="3" maxlength="2000">{aiUseCases}</textarea>
+            </label>
+            <label class="settings-field">
+              <span>Verification practice</span>
+              <textarea name="verification_practice" rows="3" maxlength="2000">{aiVerification}</textarea>
+            </label>
+            <label class="settings-field">
+              <span>Known failure modes</span>
+              <textarea name="failure_modes" rows="3" maxlength="2000">{aiFailures}</textarea>
+            </label>
+            <div class="row" style="justify-content: flex-end; gap: 8px;">
+              <button class="btn btn-primary" type="submit">Save AI policy</button>
+            </div>
+            <p class="muted settings-status" data-status></p>
+          </form>
+        </section>
+
+        <section class="card settings-section">
+          <h2>How to read me</h2>
+          <p class="muted">A reading guide for new readers — what to skip, what to start with.</p>
+          <form data-card-form data-card="reading_guide">
+            <label class="settings-field">
+              <span>Prerequisites</span>
+              <textarea name="prerequisites" rows="3" maxlength="2000">{rgPrereq}</textarea>
+            </label>
+            <label class="settings-field">
+              <span>Start here</span>
+              <textarea name="start_here" rows="3" maxlength="2000">{rgStart}</textarea>
+            </label>
+            <label class="settings-field">
+              <span>Avoid starting with</span>
+              <textarea name="avoid_starting_with" rows="3" maxlength="2000">{rgAvoid}</textarea>
+            </label>
+            <label class="settings-field">
+              <span>Common pitfalls</span>
+              <textarea name="common_pitfalls" rows="3" maxlength="2000">{rgPitfalls}</textarea>
+            </label>
+            <div class="row" style="justify-content: flex-end; gap: 8px;">
+              <button class="btn btn-primary" type="submit">Save reading guide</button>
+            </div>
+            <p class="muted settings-status" data-status></p>
+          </form>
+        </section>
+      </>
+    )}
+  </main>
+</Base>
+
+<script is:inline>
+  (function () {
+    function setStatus(el, msg) { if (el) el.textContent = msg; }
+    function clearStatus(el) { setTimeout(function () { if (el) el.textContent = ''; }, 1800); }
+
+    document.querySelectorAll('[data-mode-form]').forEach(function (form) {
+      form.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        var mode = form.getAttribute('data-mode');
+        var enabled = form.querySelector('input[name="enabled"]').checked;
+        var isPublic = form.querySelector('input[name="public"]').checked;
+        var status = form.querySelector('[data-status]');
+        setStatus(status, 'Saving…');
+        try {
+          var res = await fetch('/api-proxy/me/profile/modes', {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mode: mode, enabled: enabled, public: isPublic }),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          setStatus(status, 'Saved.');
+        } catch (e) {
+          setStatus(status, 'Failed: ' + ((e && e.message) || 'unknown'));
+        }
+        clearStatus(status);
+      });
+    });
+
+    document.querySelectorAll('[data-card-form]').forEach(function (form) {
+      form.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        var card = form.getAttribute('data-card');
+        var status = form.querySelector('[data-status]');
+        setStatus(status, 'Saving…');
+        var content = {};
+        form.querySelectorAll('textarea').forEach(function (ta) {
+          var name = ta.getAttribute('name');
+          var val = ta.value.trim();
+          if (!val) return;
+          if (name === 'models_used' || name === 'models_avoided' || name === 'use_cases') {
+            content[name] = val.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
+          } else {
+            content[name] = val;
+          }
+        });
+        try {
+          var res = await fetch('/api-proxy/me/profile/cards/' + encodeURIComponent(card), {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(content),
+          });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          setStatus(status, 'Saved.');
+        } catch (e) {
+          setStatus(status, 'Failed: ' + ((e && e.message) || 'unknown'));
+        }
+        clearStatus(status);
+      });
+    });
+  })();
+</script>
+
+<style>
+  .settings-section { padding: 16px 18px; margin-top: 14px; }
+  .settings-section h2 { margin: 0 0 6px; font-family: var(--font-serif); font-size: 16px; }
+  .settings-section > p.muted { margin: 0 0 12px; font-size: 13px; }
+  .settings-mode {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 8px 0;
+    border-top: 1px solid var(--border);
+  }
+  .settings-mode:first-of-type { border-top: 0; }
+  .settings-mode-label { font-weight: 600; min-width: 90px; }
+  .settings-mode label { font-size: 13px; }
+  .settings-status { font-size: 12px; margin: 4px 0 0; min-height: 1em; }
+
+  .settings-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-size: 13px; }
+  .settings-field span { font-weight: 500; color: var(--text-secondary); }
+  .settings-field textarea {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-base);
+    color: var(--text-primary);
+    resize: vertical;
+  }
+</style>
