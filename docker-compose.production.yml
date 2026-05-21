@@ -199,9 +199,16 @@ services:
   # docs/ops/ANALYTICS.md. The website tracker is wired into the web app
   # behind PUBLIC_UMAMI_SCRIPT_URL + PUBLIC_UMAMI_WEBSITE_ID. Caddy routes
   # https://analytics.openxiv.net to this container on port 3000.
+  # Umami services are gated by the `analytics` Compose profile so they
+  # do not block the default stack from coming up. Bring them online with:
+  #   docker compose --profile analytics -f ... -f ... up -d umami-init umami
+  # Until the operator generates UMAMI_APP_SECRET and adds DNS for
+  # analytics.openxiv.net, leave the profile inactive and the stack
+  # behaves exactly as before.
   umami-init:
     image: postgres:16-alpine
     restart: "no"
+    profiles: ["analytics"]
     depends_on:
       postgres:
         condition: service_started
@@ -218,6 +225,7 @@ services:
   umami:
     image: ghcr.io/umami-software/umami:postgresql-v2.20.0
     restart: unless-stopped
+    profiles: ["analytics"]
     depends_on:
       postgres:
         condition: service_started
@@ -240,7 +248,6 @@ services:
       - api
       - web
       - minio
-      - umami
     ports:
       - "80:80"
       - "443:443"
