@@ -400,6 +400,7 @@ function renderOaiDc(loaded: PaperWithRelations, webBase: string): string {
         ${dcKeywords}
         ${loaded.paper.abstract ? `<dc:description>${esc(loaded.paper.abstract)}</dc:description>` : ''}
         <dc:date>${esc(date)}</dc:date>
+        <dc:type>info:eu-repo/semantics/preprint</dc:type>
         <dc:type>text</dc:type>
         <dc:format>application/pdf</dc:format>
         <dc:identifier>${esc(loaded.paper.openxivId ?? loaded.paper.id)}</dc:identifier>
@@ -409,6 +410,8 @@ function renderOaiDc(loaded: PaperWithRelations, webBase: string): string {
         <dc:source>${esc(issnUrn())}</dc:source>
         <dc:language>${language}</dc:language>
         <dc:publisher>OpenXiv</dc:publisher>
+        <dc:rights>info:eu-repo/semantics/openAccess</dc:rights>
+        ${licenseHref(loaded.paper.license) ? `<dc:rights>${esc(licenseHref(loaded.paper.license))}</dc:rights>` : ''}
         <dc:rights>${esc(loaded.paper.license)}</dc:rights>
       </oai_dc:dc>`;
 }

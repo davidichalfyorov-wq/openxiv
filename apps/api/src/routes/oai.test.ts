@@ -136,4 +136,57 @@ describe('oaiPmhRoutes — BASE validator schema locations', () => {
     );
     await app.close();
   });
+
+  it('emits OpenAIRE Guidelines v4 compliance tokens (rights + type)', async () => {
+    const loaded = {
+      paper: {
+        id: 'paper-1',
+        openxivId: 'openxiv:math-ph.2026.00001',
+        title: 'A test preprint',
+        abstract: 'A short abstract.',
+        primaryCategory: 'math-ph',
+        license: 'CC-BY-4.0',
+        doi: null,
+        createdAt: new Date('2026-05-19T12:00:00Z'),
+        publishedAt: new Date('2026-05-19T12:30:00Z'),
+        updatedAt: new Date('2026-05-19T13:00:00Z'),
+      },
+      authors: [{ displayName: 'Ada Lovelace', orcid: null, affiliation: null }],
+      categories: [],
+      keywords: [],
+    };
+    const app = Fastify();
+    app.decorate('ctx', {
+      env: { PUBLIC_WEB_BASE: 'https://openxiv.net' },
+      repos: {
+        papers: {
+          list: vi.fn(() => okAsync([{ id: 'paper-1' }])),
+          loadWithRelations: vi.fn(() => okAsync(loaded)),
+        },
+      },
+      redis: {},
+    } as unknown as AppContext);
+    await app.register(oaiPmhRoutes);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/oai-pmh?verb=ListRecords&metadataPrefix=oai_dc',
+    });
+
+    expect(res.statusCode, res.body).toBe(200);
+    // OpenAIRE Guidelines for Literature Repositories v4 require the
+    // info:eu-repo access marker as a dc:rights element. Without it the
+    // OpenAIRE Validator reports Property Rights (MA) as a hard error.
+    expect(res.body).toContain('<dc:rights>info:eu-repo/semantics/openAccess</dc:rights>');
+    // The CC license URL must also be present as a second dc:rights so the
+    // resource carries both the access status and the actual license.
+    expect(res.body).toContain(
+      '<dc:rights>https://creativecommons.org/licenses/by/4.0/</dc:rights>',
+    );
+    // Preprint resourceTypeGeneral comes in via dc:type as the info:eu-repo
+    // marker. We also keep the generic "text" dc:type for DC compliance.
+    expect(res.body).toContain('<dc:type>info:eu-repo/semantics/preprint</dc:type>');
+    expect(res.body).toContain('<dc:type>text</dc:type>');
+    await app.close();
+  });
 });
