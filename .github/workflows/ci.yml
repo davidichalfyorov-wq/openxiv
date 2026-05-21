@@ -53,6 +53,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: [unit]
     if: github.event_name == 'push'
+    # The e2e job spins up the full docker-compose stack (Postgres, Redis,
+    # MinIO, GROBID, api, worker, web) and runs Playwright against it.
+    # It is informational only on the hosted GitHub runners until the
+    # stack is hardened to come up cleanly without operator-provided env.
+    # Unit tests remain the blocking signal.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
