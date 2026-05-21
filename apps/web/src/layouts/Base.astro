@@ -4,6 +4,7 @@ import { serverClient } from '../lib/api';
 import { OPENXIV_ISSN, issnPortalUrl } from '@openxiv/shared';
 import CookieBanner from '../components/CookieBanner.astro';
 import TwitterPixel from '../components/TwitterPixel.astro';
+import UmamiTracker from '../components/UmamiTracker.astro';
 import { safeJsonLd, ORG_ID } from '../lib/jsonld';
 
 interface Props {
@@ -269,6 +270,16 @@ try {
     */
     }
     <TwitterPixel />
+    {
+      /*
+      Self-hosted Umami pageview tracker. Emits nothing when the
+      PUBLIC_UMAMI_* env vars are empty or when the analytics consent
+      cookie is missing. See components/UmamiTracker.astro for the
+      gating details and docs/ops/ANALYTICS.md for the provisioning
+      flow.
+    */
+    }
+    <UmamiTracker />
   </head>
   <body>
     <a href="#main" class="skip-link">Skip to content</a>

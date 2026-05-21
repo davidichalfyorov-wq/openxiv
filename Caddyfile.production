@@ -15,7 +15,10 @@ openxiv.net, www.openxiv.net {
 		X-Frame-Options "SAMEORIGIN"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "geolocation=(), microphone=(), camera=(), interest-cohort=()"
-		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; img-src 'self' data: https://openxiv.net https://www.openxiv.net https://cdn.bsky.app https://av-cdn.bsky.app https://static.ads-twitter.com; script-src 'self' 'unsafe-inline' https://static.ads-twitter.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; connect-src 'self' https://openxiv.net https://www.openxiv.net https://bsky.social https://*.bsky.network https://static.ads-twitter.com https://analytics.twitter.com; frame-src 'self'; upgrade-insecure-requests"
+		# script-src and connect-src allow https://analytics.openxiv.net so the
+		# Umami tracker (loaded from that subdomain) can fetch its script and
+		# send pageview events back to the collector.
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; img-src 'self' data: https://openxiv.net https://www.openxiv.net https://cdn.bsky.app https://av-cdn.bsky.app https://static.ads-twitter.com; script-src 'self' 'unsafe-inline' https://static.ads-twitter.com https://cdn.jsdelivr.net https://analytics.openxiv.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; connect-src 'self' https://openxiv.net https://www.openxiv.net https://bsky.social https://*.bsky.network https://static.ads-twitter.com https://analytics.twitter.com https://analytics.openxiv.net; frame-src 'self'; upgrade-insecure-requests"
 		-Server
 	}
 
@@ -74,6 +77,33 @@ openxiv.net, www.openxiv.net {
 			header_up X-Forwarded-Proto https
 			header_up X-Real-IP {remote_host}
 		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+# Self-hosted Umami analytics dashboard and tracker collector. The website
+# script tag on openxiv.net loads analytics.openxiv.net/script.js and posts
+# pageview events back to analytics.openxiv.net/api/send. Caddy fronts the
+# container so the public traffic stays on the standard 443 port and the
+# Let's Encrypt cert renews automatically.
+analytics.openxiv.net {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=(), interest-cohort=()"
+		-Server
+	}
+
+	reverse_proxy umami:3000 {
+		header_up X-Forwarded-Proto https
+		header_up X-Real-IP {remote_host}
 	}
 
 	log {

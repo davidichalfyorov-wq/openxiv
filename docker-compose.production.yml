@@ -178,11 +178,60 @@ services:
       PUBLIC_TWITTER_SIGNUP_EVENT_ID: ${PUBLIC_TWITTER_SIGNUP_EVENT_ID:-tw-rch4y-rch5b}
       PUBLIC_TWITTER_PAPERSUBMIT_EVENT_ID: ${PUBLIC_TWITTER_PAPERSUBMIT_EVENT_ID:-tw-rch4y-rch5e}
       PUBLIC_TWITTER_TRACKING_ENABLED: ${PUBLIC_TWITTER_TRACKING_ENABLED:-true}
+      # Self-hosted Umami tracker (see docker-compose umami service below).
+      # When PUBLIC_UMAMI_SCRIPT_URL is empty, the layout skips the tag and
+      # no analytics is loaded. Both vars must be set for the tracker to
+      # appear.
+      PUBLIC_UMAMI_SCRIPT_URL: ${PUBLIC_UMAMI_SCRIPT_URL:-}
+      PUBLIC_UMAMI_WEBSITE_ID: ${PUBLIC_UMAMI_WEBSITE_ID:-}
     ports: !reset []
     deploy:
       resources:
         limits:
           memory: 700m
+
+  # Privacy-friendly self-hosted analytics. Reuses the existing Postgres
+  # container with a separate `umami` database. The init container runs
+  # before umami and creates the database if it does not yet exist; the
+  # umami container itself then runs its own migrations on first start.
+  #
+  # First-time provisioning notes for the operator live in
+  # docs/ops/ANALYTICS.md. The website tracker is wired into the web app
+  # behind PUBLIC_UMAMI_SCRIPT_URL + PUBLIC_UMAMI_WEBSITE_ID. Caddy routes
+  # https://analytics.openxiv.net to this container on port 3000.
+  umami-init:
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_started
+    environment:
+      PGPASSWORD: openxiv
+    entrypoint: >-
+      /bin/sh -c "
+      until pg_isready -h postgres -U openxiv -d openxiv >/dev/null 2>&1; do sleep 1; done;
+      psql -h postgres -U openxiv -d openxiv -tc \"SELECT 1 FROM pg_database WHERE datname='umami'\" | grep -q 1 ||
+      psql -h postgres -U openxiv -d openxiv -c 'CREATE DATABASE umami;';
+      echo 'umami database ready'
+      "
+
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-v2.20.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_started
+      umami-init:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: ${UMAMI_DATABASE_URL:-postgres://openxiv:openxiv@postgres:5432/umami}
+      DATABASE_TYPE: postgresql
+      APP_SECRET: ${UMAMI_APP_SECRET:?set UMAMI_APP_SECRET (openssl rand -hex 32)}
+      DISABLE_TELEMETRY: "1"
+    deploy:
+      resources:
+        limits:
+          memory: 384m
 
   caddy:
     image: caddy:2-alpine
@@ -191,6 +240,7 @@ services:
       - api
       - web
       - minio
+      - umami
     ports:
       - "80:80"
       - "443:443"
