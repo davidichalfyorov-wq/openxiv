@@ -234,7 +234,11 @@ services:
     environment:
       DATABASE_URL: ${UMAMI_DATABASE_URL:-postgres://openxiv:openxiv@postgres:5432/umami}
       DATABASE_TYPE: postgresql
-      APP_SECRET: ${UMAMI_APP_SECRET:?set UMAMI_APP_SECRET (openssl rand -hex 32)}
+      # Default is intentionally insecure; the umami profile must not be
+      # enabled until the operator sets a real UMAMI_APP_SECRET via
+      # `openssl rand -hex 32`. The default keeps compose validation
+      # passing for the non-analytics stack which never starts umami.
+      APP_SECRET: ${UMAMI_APP_SECRET:-please-replace-via-openssl-rand-hex-32}
       DISABLE_TELEMETRY: "1"
     deploy:
       resources:
